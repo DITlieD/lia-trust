@@ -3,7 +3,10 @@ name = "lia-taint"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stub crate for later LIA units (not implemented in L0)"
+description = "Minimal untrusted-source to destructive-sink taint core"
 publish = false
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

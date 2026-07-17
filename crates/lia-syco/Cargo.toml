@@ -3,7 +3,17 @@ name = "lia-syco"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stub crate for later LIA units (not implemented in L0)"
+description = "Sycophancy measurement: unsupported agreement and framing stability"
 publish = false
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+lia-protocol = { workspace = true }
+lia-ground = { workspace = true }
+lia-gates = { workspace = true }

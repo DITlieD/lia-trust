@@ -4,14 +4,22 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{evaluate_generic_action, evaluate_named_gate, GenericAction};
+use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_gates::{
-    load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateOutcome,
+    load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateConfig,
+    GateOutcome, GateRequest,
+};
+use lia_ground::{
+    ground_result_to_outcome, load_claim, load_context, parse_claim, verify_claim,
+    verify_claim_with_id, GroundContext, GROUND_GATE_ID,
 };
 use lia_journal::{append_signed, verify_chain, Journal, SigningIdentity};
 use lia_policy::{
     evaluate_frozen, freeze_policy_from_path, load_evidence_json, EvidenceSet,
 };
 use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
+use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
+use lia_taint::{check_flows, parse_graph};
 use lia_verify::{
     build_demo_bundle, build_gate_receipt_bundle, sign_verification_report, verify_bundle,
     verify_report_signature, write_verification_report, VerificationReport,
@@ -104,6 +112,70 @@ enum Commands {
         verifier_secret_key_hex: String,
         #[arg(long, default_value = "verifier")]
         verifier_key_id: String,
+    },
+    Ground {
+        #[arg(long)]
+        claim: Option<String>,
+        #[arg(long)]
+        claim_file: Option<PathBuf>,
+        #[arg(long)]
+        context: Option<PathBuf>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long)]
+        action_id: Option<Uuid>,
+    },
+    Syco {
+        #[arg(long)]
+        exchange: Option<String>,
+        #[arg(long)]
+        exchange_file: Option<PathBuf>,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long)]
+        action_id: Option<Uuid>,
+    },
+    #[command(name = "ast-gate")]
+    AstGate {
+        path: Option<PathBuf>,
+        #[arg(long)]
+        diff: Option<PathBuf>,
+        #[arg(long)]
+        diff_text: Option<String>,
+        #[arg(long)]
+        language: Option<String>,
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long)]
+        action_id: Option<Uuid>,
+    },
+    Taint {
+        #[arg(long)]
+        graph: Option<String>,
+        #[arg(long)]
+        graph_file: Option<PathBuf>,
     },
 }
 
@@ -286,6 +358,68 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             println!("{}", serde_json::json!({"bundle": path, "run_id": run_id}));
             Ok(ExitCode::SUCCESS)
         }
+        Commands::Ground {
+            claim,
+            claim_file,
+            context,
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        } => run_ground(
+            claim,
+            claim_file,
+            context,
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        ),
+        Commands::Syco {
+            exchange,
+            exchange_file,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        } => run_syco(
+            exchange,
+            exchange_file,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        ),
+        Commands::AstGate {
+            path,
+            diff,
+            diff_text,
+            language,
+            manifest,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        } => run_ast_gate(
+            path,
+            diff,
+            diff_text,
+            language,
+            manifest,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            action_id,
+        ),
+        Commands::Taint { graph, graph_file } => run_taint(graph, graph_file),
     }
 }
 
@@ -305,7 +439,7 @@ fn run_core_gate(
 
     let outcomes = if let Some(req_path) = request {
         let req = load_gate_request(&req_path)?;
-        vec![evaluate_named_gate(&req, &cfg)?]
+        vec![dispatch_gate_request(&req, &cfg)?]
     } else if let Some(action_path) = action {
         let bytes = fs::read(&action_path)?;
         let action: GenericAction = serde_json::from_slice(&bytes)?;
@@ -351,6 +485,227 @@ fn run_core_gate(
     );
 
     Ok(exit_for_outcomes(&outcomes))
+}
+
+fn dispatch_gate_request(
+    req: &GateRequest,
+    cfg: &GateConfig,
+) -> Result<GateOutcome, Box<dyn std::error::Error>> {
+    match req.gate_id.as_str() {
+        GROUND_GATE_ID => {
+            let claim_val = req
+                .payload
+                .text
+                .as_ref()
+                .ok_or("ground gate request requires payload.text claim json")?;
+            let claim = parse_claim(claim_val)?;
+            let ctx = GroundContext::from_gate_config(cfg);
+            let result = verify_claim_with_id(&claim, &ctx, req.action_id)?;
+            Ok(ground_result_to_outcome(&result))
+        }
+        SYCO_GATE_ID => {
+            let ex_val = req
+                .payload
+                .text
+                .as_ref()
+                .ok_or("syco gate request requires payload.text exchange json")?;
+            let exchange = parse_exchange(ex_val)?;
+            let report = detect(&exchange)?;
+            Ok(syco_report_to_outcome(&report, req.action_id))
+        }
+        AST_GATE_ID => {
+            let opts = ScanOptions {
+                manifest_packages: req
+                    .payload
+                    .new_dependencies
+                    .clone()
+                    .unwrap_or_default(),
+                language: None,
+            };
+            let report = if let Some(diff) = req.payload.text.as_ref() {
+                scan_diff(diff, &opts)?
+            } else if let Some(path) = req.payload.path.as_ref() {
+                scan_file(path, &opts)?
+            } else {
+                return Err("ast-gate request requires payload.text (diff) or payload.path".into());
+            };
+            Ok(ast_report_to_outcome(&report, req.action_id))
+        }
+        _ => Ok(evaluate_named_gate(req, cfg)?),
+    }
+}
+
+fn run_ground(
+    claim: Option<String>,
+    claim_file: Option<PathBuf>,
+    context: Option<PathBuf>,
+    config: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    action_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let claim = match (claim, claim_file) {
+        (Some(s), _) => parse_claim(&s)?,
+        (None, Some(p)) => load_claim(p)?,
+        (None, None) => return Err("ground requires --claim or --claim-file".into()),
+    };
+    let mut ctx = if let Some(p) = context {
+        load_context(p)?
+    } else {
+        GroundContext {
+            root: None,
+            registry: Default::default(),
+        }
+    };
+    if let Some(cfg_path) = config {
+        let cfg = load_gate_config(cfg_path)?;
+        let from_cfg = GroundContext::from_gate_config(&cfg);
+        if ctx.root.is_none() {
+            ctx.root = from_cfg.root;
+        }
+        if ctx.registry.is_empty() {
+            ctx.registry = from_cfg.registry;
+        }
+    }
+    let result = match action_id {
+        Some(id) => verify_claim_with_id(&claim, &ctx, id)?,
+        None => verify_claim(&claim, &ctx)?,
+    };
+    let outcome = ground_result_to_outcome(&result);
+    emit_l4_outcome(&outcome, &result, journal, secret_key_hex, key_id, run_id)
+}
+
+fn run_syco(
+    exchange: Option<String>,
+    exchange_file: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    action_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let raw = match (exchange, exchange_file) {
+        (Some(s), _) => s,
+        (None, Some(p)) => fs::read_to_string(p)?,
+        (None, None) => return Err("syco requires --exchange or --exchange-file".into()),
+    };
+    let ex = parse_exchange(&raw)?;
+    let report = detect(&ex)?;
+    let action_id = action_id.unwrap_or_else(Uuid::new_v4);
+    let outcome = syco_report_to_outcome(&report, action_id);
+    emit_l4_outcome(&outcome, &report, journal, secret_key_hex, key_id, run_id)
+}
+
+fn run_ast_gate(
+    path: Option<PathBuf>,
+    diff: Option<PathBuf>,
+    diff_text: Option<String>,
+    language: Option<String>,
+    manifest: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    action_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let mut opts = ScanOptions::default();
+    if let Some(lang) = language {
+        opts.language = Some(parse_language(&lang)?);
+    }
+    if let Some(m) = manifest {
+        let text = fs::read_to_string(m)?;
+        opts.manifest_packages = text
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect();
+    }
+    let report = if let Some(t) = diff_text {
+        scan_diff(&t, &opts)?
+    } else if let Some(p) = diff {
+        let t = fs::read_to_string(p)?;
+        scan_diff(&t, &opts)?
+    } else if let Some(p) = path {
+        scan_file(p, &opts)?
+    } else {
+        return Err("ast-gate requires a path, --diff, or --diff-text".into());
+    };
+    let action_id = action_id.unwrap_or_else(Uuid::new_v4);
+    let outcome = ast_report_to_outcome(&report, action_id);
+    emit_l4_outcome(&outcome, &report, journal, secret_key_hex, key_id, run_id)
+}
+
+fn run_taint(
+    graph: Option<String>,
+    graph_file: Option<PathBuf>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let raw = match (graph, graph_file) {
+        (Some(s), _) => s,
+        (None, Some(p)) => fs::read_to_string(p)?,
+        (None, None) => return Err("taint requires --graph or --graph-file".into()),
+    };
+    let g = parse_graph(&raw)?;
+    let report = check_flows(&g)?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    match report.verdict {
+        lia_taint::TaintVerdict::Allow => Ok(ExitCode::SUCCESS),
+        lia_taint::TaintVerdict::Deny => Ok(ExitCode::from(2)),
+    }
+}
+
+fn parse_language(s: &str) -> Result<Language, Box<dyn std::error::Error>> {
+    match s.to_ascii_lowercase().as_str() {
+        "python" | "py" => Ok(Language::Python),
+        "rust" | "rs" => Ok(Language::Rust),
+        "javascript" | "js" => Ok(Language::Javascript),
+        other => Err(format!("unknown language: {other}").into()),
+    }
+}
+
+fn emit_l4_outcome<T: serde::Serialize>(
+    outcome: &GateOutcome,
+    report: &T,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let run_id = run_id.unwrap_or_else(Uuid::new_v4);
+    let mut journal_rows = Vec::new();
+    if let Some(db) = journal {
+        let secret = secret_key_hex.ok_or("journaling requires --secret-key-hex")?;
+        let identity = SigningIdentity::from_secret_key_hex(key_id, &secret)?;
+        let j = if db.exists() {
+            Journal::open(&db)?
+        } else {
+            Journal::create(&db)?
+        };
+        let event = outcome_to_event(outcome);
+        let row = append_signed(&j, run_id, event, &identity)?;
+        journal_rows.push(serde_json::json!({
+            "seq": row.seq,
+            "row_hash": row.row_hash,
+            "prev_hash": row.prev_hash,
+            "receipt_id": row.receipt.as_ref().map(|r| r.receipt_id),
+            "signature_hex": row.receipt.as_ref().map(|r| &r.signature_hex),
+            "gate_id": outcome.gate_id,
+            "verdict": outcome.verdict,
+            "reason_code": outcome.reason_code,
+        }));
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "run_id": run_id,
+            "report": report,
+            "outcomes": [outcome],
+            "journal_receipts": journal_rows,
+            "overall": outcome.verdict,
+        }))?
+    );
+    Ok(exit_for_outcomes(std::slice::from_ref(outcome)))
 }
 
 fn outcome_to_event(outcome: &GateOutcome) -> Event {
