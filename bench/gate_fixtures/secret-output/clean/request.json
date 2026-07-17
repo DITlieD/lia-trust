@@ -1,0 +1,8 @@
+{
+  "gate_id": "secret-output",
+  "action_id": "2839735c-9f2c-4b19-a8ff-1e928e5b7dba",
+  "kind": "other",
+  "payload": {
+    "text": "public docs only, no credentials"
+  }
+}

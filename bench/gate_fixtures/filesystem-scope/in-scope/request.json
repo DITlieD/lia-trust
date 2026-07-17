@@ -1,0 +1,9 @@
+{
+  "gate_id": "filesystem-scope",
+  "action_id": "dadfd87b-b720-478b-a1f2-bbeee9708262",
+  "kind": "write_file",
+  "payload": {
+    "path": "src/main.rs",
+    "is_write": true
+  }
+}

@@ -3,7 +3,22 @@ name = "lia-gates"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stub crate for later LIA units (not implemented in L0)"
+description = "Seven core LIA trust gates (rules-as-data + deterministic predicates)"
 publish = false
 
 [dependencies]
+lia-protocol = { workspace = true }
+lia-policy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+blake3 = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

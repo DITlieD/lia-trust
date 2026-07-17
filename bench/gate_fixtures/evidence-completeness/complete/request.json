@@ -1,0 +1,11 @@
+{
+  "gate_id": "evidence-completeness",
+  "action_id": "f9af7645-e078-4be6-88a8-dd8dff89da20",
+  "kind": "complete_task",
+  "payload": {
+    "modified_paths": [
+      "src/lib.rs"
+    ],
+    "has_test_result": true
+  }
+}

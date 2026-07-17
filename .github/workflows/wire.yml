@@ -119,7 +119,17 @@ jobs:
   layer4_gate_receipts:
     name: "L4 gate receipts"
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
-      - run: exit 1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: gate receipt smoke
+        run: bash tools/scripts/layer4_gate_receipt_smoke.sh
+
+  is1_integration_smoke:
+    name: "IS-1 multi-step gate smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: is1 smoke
+        run: bash tools/scripts/is1_smoke.sh

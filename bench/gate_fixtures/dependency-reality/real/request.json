@@ -1,0 +1,9 @@
+{
+  "gate_id": "dependency-reality",
+  "action_id": "0630b100-b84e-403a-b25e-f77342e22c87",
+  "kind": "add_dependency",
+  "payload": {
+    "package": "serde",
+    "version": "1.0.210"
+  }
+}

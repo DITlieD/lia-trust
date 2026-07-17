@@ -3,7 +3,13 @@ name = "lia-adapters"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stub crate for later LIA units (not implemented in L0)"
+description = "LIA adapter entrypoints (L2: generic gate dispatch stub; L3 expands wrap/hooks)"
 publish = false
 
 [dependencies]
+lia-gates = { workspace = true }
+lia-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }

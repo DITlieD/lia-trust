@@ -1,14 +1,20 @@
+use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use lia_adapters::{evaluate_generic_action, evaluate_named_gate, GenericAction};
+use lia_gates::{
+    load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateOutcome,
+};
 use lia_journal::{append_signed, verify_chain, Journal, SigningIdentity};
 use lia_policy::{
     evaluate_frozen, freeze_policy_from_path, load_evidence_json, EvidenceSet,
 };
-use lia_protocol::parse_event;
+use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_verify::{
-    sign_verification_report, verify_bundle, write_verification_report, VerificationReport,
+    build_demo_bundle, build_gate_receipt_bundle, sign_verification_report, verify_bundle,
+    verify_report_signature, write_verification_report, VerificationReport,
 };
 use uuid::Uuid;
 
@@ -40,9 +46,25 @@ enum Commands {
     },
     Gate {
         #[arg(long)]
-        rules: PathBuf,
+        rules: Option<PathBuf>,
         #[arg(long)]
-        evidence: PathBuf,
+        evidence: Option<PathBuf>,
+        #[arg(long)]
+        action: Option<PathBuf>,
+        #[arg(long)]
+        request: Option<PathBuf>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long)]
+        write_rules: Option<PathBuf>,
     },
     Verify {
         bundle: PathBuf,
@@ -52,6 +74,36 @@ enum Commands {
         verifier_key_id: String,
         #[arg(long)]
         report_out: Option<PathBuf>,
+    },
+    #[command(name = "fixture-bundle")]
+    FixtureBundle {
+        #[arg(long)]
+        journal: PathBuf,
+        #[arg(long)]
+        outcome: PathBuf,
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "fixture")]
+        key_id: String,
+        #[arg(long, default_value = "verifier")]
+        verifier_key_id: String,
+        #[arg(long)]
+        verifier_secret_key_hex: Option<String>,
+    },
+    #[command(name = "demo-bundle")]
+    DemoBundle {
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        journal_secret_key_hex: String,
+        #[arg(long, default_value = "journal")]
+        journal_key_id: String,
+        #[arg(long)]
+        verifier_secret_key_hex: String,
+        #[arg(long, default_value = "verifier")]
+        verifier_key_id: String,
     },
 }
 
@@ -101,15 +153,52 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             verify_chain(&db)?;
             Ok(ExitCode::SUCCESS)
         }
-        Commands::Gate { rules, evidence } => {
+        Commands::Gate {
+            rules,
+            evidence,
+            action,
+            request,
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            write_rules,
+        } => {
+            if let Some(path) = write_rules {
+                write_core_rules(&path)?;
+                let frozen = load_core_rules(&path)?;
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "wrote": path,
+                        "policy_id": frozen.policy_id,
+                        "policy_hash": frozen.policy_hash,
+                    })
+                );
+                return Ok(ExitCode::SUCCESS);
+            }
+
+            if action.is_some() || request.is_some() {
+                return run_core_gate(
+                    action,
+                    request,
+                    config,
+                    journal,
+                    secret_key_hex,
+                    key_id,
+                    run_id,
+                );
+            }
+
+            let rules =
+                rules.ok_or("gate requires --rules with --evidence, or --action/--request")?;
+            let evidence = evidence.ok_or("gate requires --evidence with --rules")?;
             let frozen = freeze_policy_from_path(&rules)?;
             let evidence_set = load_gate_evidence(&evidence)?;
             let report = evaluate_frozen(&frozen, &evidence_set)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
-            if matches!(
-                report.overall,
-                lia_protocol::Verdict::Allow | lia_protocol::Verdict::Advisory
-            ) {
+            if matches!(report.overall, Verdict::Allow | Verdict::Advisory) {
                 Ok(ExitCode::SUCCESS)
             } else {
                 Ok(ExitCode::from(2))
@@ -126,6 +215,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 let identity =
                     SigningIdentity::from_secret_key_hex(verifier_key_id, &secret)?;
                 sign_verification_report(&mut report, &identity)?;
+                verify_report_signature(&report)?;
             }
             emit_verify_report(&report, report_out.as_ref())?;
             if report.accepted {
@@ -134,6 +224,183 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 Ok(ExitCode::from(1))
             }
         }
+        Commands::FixtureBundle {
+            journal,
+            outcome,
+            bundle,
+            secret_key_hex,
+            key_id,
+            verifier_key_id,
+            verifier_secret_key_hex,
+        } => {
+            let journal_id =
+                SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+            let verifier_secret = match verifier_secret_key_hex {
+                Some(s) => s,
+                None => {
+                    let mut bytes = hex::decode(&secret_key_hex).map_err(|e| {
+                        format!("secret_key_hex decode failed: {e}")
+                    })?;
+                    if bytes.len() != 32 {
+                        return Err(format!(
+                            "secret_key_hex must be 32 bytes, got {}",
+                            bytes.len()
+                        )
+                        .into());
+                    }
+                    for b in &mut bytes {
+                        *b ^= 0x5a;
+                    }
+                    hex::encode(bytes)
+                }
+            };
+            let verifier_id =
+                SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;
+            let outcome_bytes = fs::read(&outcome)?;
+            let path = build_gate_receipt_bundle(
+                &bundle,
+                &journal,
+                &journal_id,
+                &verifier_id,
+                &outcome_bytes,
+            )?;
+            println!("{}", serde_json::json!({"bundle": path}));
+            Ok(ExitCode::SUCCESS)
+        }
+        Commands::DemoBundle {
+            out,
+            journal_secret_key_hex,
+            journal_key_id,
+            verifier_secret_key_hex,
+            verifier_key_id,
+        } => {
+            let journal_id = SigningIdentity::from_secret_key_hex(
+                journal_key_id,
+                &journal_secret_key_hex,
+            )?;
+            let verifier_id = SigningIdentity::from_secret_key_hex(
+                verifier_key_id,
+                &verifier_secret_key_hex,
+            )?;
+            let (path, run_id) = build_demo_bundle(&out, &journal_id, &verifier_id)?;
+            println!("{}", serde_json::json!({"bundle": path, "run_id": run_id}));
+            Ok(ExitCode::SUCCESS)
+        }
+    }
+}
+
+fn run_core_gate(
+    action: Option<PathBuf>,
+    request: Option<PathBuf>,
+    config: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let config_path = config.ok_or("core gate requires --config")?;
+    let mut cfg = load_gate_config(&config_path)?;
+    let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);
+    cfg.run_id = Some(run_id);
+
+    let outcomes = if let Some(req_path) = request {
+        let req = load_gate_request(&req_path)?;
+        vec![evaluate_named_gate(&req, &cfg)?]
+    } else if let Some(action_path) = action {
+        let bytes = fs::read(&action_path)?;
+        let action: GenericAction = serde_json::from_slice(&bytes)?;
+        evaluate_generic_action(&action, &cfg)?
+    } else {
+        return Err("core gate requires --action or --request".into());
+    };
+
+    let mut journal_rows = Vec::new();
+    if let Some(db) = journal {
+        let secret = secret_key_hex.ok_or("journaling requires --secret-key-hex")?;
+        let identity = SigningIdentity::from_secret_key_hex(key_id, &secret)?;
+        let j = if db.exists() {
+            Journal::open(&db)?
+        } else {
+            Journal::create(&db)?
+        };
+        for outcome in &outcomes {
+            let event = outcome_to_event(outcome);
+            let row = append_signed(&j, run_id, event, &identity)?;
+            journal_rows.push(serde_json::json!({
+                "seq": row.seq,
+                "row_hash": row.row_hash,
+                "prev_hash": row.prev_hash,
+                "receipt_id": row.receipt.as_ref().map(|r| r.receipt_id),
+                "signature_hex": row.receipt.as_ref().map(|r| &r.signature_hex),
+                "gate_id": outcome.gate_id,
+                "verdict": outcome.verdict,
+                "reason_code": outcome.reason_code,
+            }));
+        }
+    }
+
+    let overall = worst_outcome(&outcomes);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "run_id": run_id,
+            "outcomes": outcomes,
+            "journal_receipts": journal_rows,
+            "overall": overall,
+        }))?
+    );
+
+    Ok(exit_for_outcomes(&outcomes))
+}
+
+fn outcome_to_event(outcome: &GateOutcome) -> Event {
+    Event::GateVerdict(GateVerdictEvent {
+        action_id: outcome.action_id,
+        gate_id: outcome.gate_id.clone(),
+        verdict: outcome.verdict.clone(),
+        reason_code: outcome.reason_code.clone(),
+        risk_tier: outcome.risk_tier.clone(),
+        detail: outcome.detail.clone(),
+        evidence_sha256: Some(outcome.evidence_sha256.clone()),
+        timestamp: outcome.timestamp,
+    })
+}
+
+fn worst_outcome(outcomes: &[GateOutcome]) -> Verdict {
+    let mut worst = Verdict::Allow;
+    for o in outcomes {
+        worst = worse(worst, o.verdict.clone());
+    }
+    worst
+}
+
+fn worse(a: Verdict, b: Verdict) -> Verdict {
+    if rank(&a) >= rank(&b) {
+        a
+    } else {
+        b
+    }
+}
+
+fn rank(v: &Verdict) -> u8 {
+    match v {
+        Verdict::Allow | Verdict::Verified => 0,
+        Verdict::Advisory | Verdict::Unsupported | Verdict::Incomplete => 1,
+        Verdict::Quarantine => 2,
+        Verdict::Deny | Verdict::Refuted => 3,
+    }
+}
+
+fn exit_for_outcomes(outcomes: &[GateOutcome]) -> ExitCode {
+    if outcomes.is_empty() {
+        return ExitCode::from(2);
+    }
+    let overall = worst_outcome(outcomes);
+    match overall {
+        Verdict::Allow | Verdict::Advisory | Verdict::Verified => ExitCode::SUCCESS,
+        Verdict::Refuted => ExitCode::from(3),
+        Verdict::Incomplete => ExitCode::from(4),
+        Verdict::Deny | Verdict::Quarantine | Verdict::Unsupported => ExitCode::from(2),
     }
 }
 

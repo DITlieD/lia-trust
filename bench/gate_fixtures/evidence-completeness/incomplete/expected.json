@@ -1,0 +1,6 @@
+{
+  "gate_id": "evidence-completeness",
+  "verdict": "incomplete",
+  "reason_code": "EVIDENCE_INCOMPLETE",
+  "exit_code": 4
+}

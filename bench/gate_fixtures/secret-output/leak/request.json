@@ -1,0 +1,8 @@
+{
+  "gate_id": "secret-output",
+  "action_id": "d0513f19-5897-4708-b754-197865155b19",
+  "kind": "other",
+  "payload": {
+    "text": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PRIVATE KEY-----"
+  }
+}

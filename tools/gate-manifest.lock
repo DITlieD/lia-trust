@@ -1,7 +1,7 @@
 # gate-manifest.lock — frozen wiring-gate baseline (R8). Do NOT edit by hand.
 # Regenerate out-of-band: cargo run -p lia_gate_freeze -- --lock
 # format: relpath<TAB>algo<TAB>hexdigest
-.github/workflows/wire.yml	blake3	0e12765f0435a283cce0b9bf6f8b9487dbf8fc5a37749cae13375a1634e65f9a
+.github/workflows/wire.yml	blake3	a34861c750f5c467c75305f414aa35741ab36d414185ef96accdd0c621e75994
 tools/cargo-llvm-cov.pin	blake3	f608e19e097fda642a1392dd61d2b6fb8364157ce9c9c6678c464d17e4150dd2
 tools/gate-manifest.txt	blake3	a6ce56bb4961b35bf1077c31811c64611b43d06577f567bae050933c0eb747ba
 tools/lia_gate_freeze/Cargo.toml	blake3	38906ec14d45c77af1247ace2849496ba20cd8855bf5b17cf157cf64fcd50894

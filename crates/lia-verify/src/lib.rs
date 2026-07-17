@@ -487,6 +487,92 @@ rules:
     Ok((bundle_dir.to_path_buf(), run_id))
 }
 
+pub fn build_gate_receipt_bundle(
+    bundle_dir: impl AsRef<Path>,
+    journal_path: impl AsRef<Path>,
+    journal_identity: &SigningIdentity,
+    verifier_identity: &SigningIdentity,
+    outcome_json: &[u8],
+) -> Result<PathBuf, VerifyError> {
+    let bundle_dir = bundle_dir.as_ref();
+    fs::create_dir_all(bundle_dir.join("evidence"))?;
+
+    let policy_yaml = r#"
+policy_id: gate-receipt
+version: "1"
+rules:
+  - id: receipt-present
+    risk_tier: quality
+    required_evidence:
+      - key: gate_receipt
+        kind: present
+    on_fail: advisory
+"#;
+    let policy_path = bundle_dir.join("policy.frozen.yaml");
+    fs::write(&policy_path, policy_yaml)?;
+    let frozen = freeze_policy_from_path(&policy_path)?;
+
+    let evidence_rel = "evidence/outcome.json";
+    fs::write(bundle_dir.join(evidence_rel), outcome_json)?;
+    let artifact_sha = sha256_hex(outcome_json);
+
+    fs::copy(journal_path.as_ref(), bundle_dir.join("journal.db"))?;
+    let journal = Journal::open_readonly(bundle_dir.join("journal.db"))?;
+    let rows = journal.load_rows()?;
+    if rows.is_empty() {
+        return Err(VerifyError::Bundle("journal has no rows".into()));
+    }
+    let run_id = rows[0].run_id;
+    write_action_stream(&bundle_dir.join("action-stream.jsonl"), &rows)?;
+
+    let trust_root = TrustRoot {
+        keys: vec![
+            journal_identity.signer_identity(),
+            verifier_identity.signer_identity(),
+        ],
+    };
+    fs::write(
+        bundle_dir.join("trust-root.json"),
+        serde_json::to_vec_pretty(&trust_root)?,
+    )?;
+
+    let signing_config = SigningConfigSnapshot {
+        gate_manifest_version: lia_protocol::GATE_MANIFEST_VERSION.to_string(),
+        journal_signer_key_id: journal_identity.key_id.clone(),
+        verifier_signer_key_id: verifier_identity.key_id.clone(),
+        captured_at: Utc::now(),
+    };
+    fs::write(
+        bundle_dir.join("signing-config.json"),
+        serde_json::to_vec_pretty(&signing_config)?,
+    )?;
+
+    let manifest = BundleManifest {
+        bundle_version: BUNDLE_VERSION.to_string(),
+        run_id,
+        policy_hash: frozen.policy_hash,
+        journal_path: "journal.db".into(),
+        policy_path: "policy.frozen.yaml".into(),
+        trust_root_path: "trust-root.json".into(),
+        signing_config_path: "signing-config.json".into(),
+        action_stream_path: "action-stream.jsonl".into(),
+        evidence: vec![EvidenceEntry {
+            id: "outcome".into(),
+            kind: "gate_outcome".into(),
+            relative_path: evidence_rel.into(),
+            sha256: artifact_sha,
+            bytes: Some(outcome_json.len() as u64),
+        }],
+        evidence_set_path: None,
+    };
+    fs::write(
+        bundle_dir.join("MANIFEST.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+
+    Ok(bundle_dir.to_path_buf())
+}
+
 fn load_manifest(bundle_dir: &Path) -> Result<BundleManifest, VerifyError> {
     let path = bundle_dir.join("MANIFEST.json");
     if !path.is_file() {

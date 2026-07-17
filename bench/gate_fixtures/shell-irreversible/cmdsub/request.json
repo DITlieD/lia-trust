@@ -1,0 +1,8 @@
+{
+  "gate_id": "shell-irreversible",
+  "action_id": "2ac57477-43f7-441e-bb28-764adbe163f6",
+  "kind": "shell",
+  "payload": {
+    "command": "rm -rf $(pwd)/.."
+  }
+}

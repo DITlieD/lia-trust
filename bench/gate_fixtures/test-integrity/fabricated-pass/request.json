@@ -1,0 +1,8 @@
+{
+  "gate_id": "test-integrity",
+  "action_id": "327a03a4-cc4d-4ace-89ca-fd41bd6ff442",
+  "kind": "run_test",
+  "payload": {
+    "claimed_pass": true
+  }
+}

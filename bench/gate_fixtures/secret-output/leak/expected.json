@@ -1,0 +1,6 @@
+{
+  "gate_id": "secret-output",
+  "verdict": "deny",
+  "reason_code": "SECRET_IN_OUTPUT",
+  "exit_code": 2
+}

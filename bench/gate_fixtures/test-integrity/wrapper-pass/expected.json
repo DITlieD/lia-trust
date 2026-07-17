@@ -1,0 +1,6 @@
+{
+  "gate_id": "test-integrity",
+  "verdict": "allow",
+  "reason_code": "TEST_INTEGRITY_OK",
+  "exit_code": 0
+}

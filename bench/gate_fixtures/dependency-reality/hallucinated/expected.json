@@ -1,0 +1,6 @@
+{
+  "gate_id": "dependency-reality",
+  "verdict": "deny",
+  "reason_code": "DEP_NOT_FOUND",
+  "exit_code": 2
+}

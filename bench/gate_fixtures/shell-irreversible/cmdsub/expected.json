@@ -1,0 +1,6 @@
+{
+  "gate_id": "shell-irreversible",
+  "verdict": "deny",
+  "reason_code": "SHELL_COMMAND_SUBSTITUTION",
+  "exit_code": 2
+}

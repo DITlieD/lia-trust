@@ -1,0 +1,6 @@
+{
+  "gate_id": "test-integrity",
+  "verdict": "refuted",
+  "reason_code": "TEST_FABRICATED_PASS",
+  "exit_code": 3
+}

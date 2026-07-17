@@ -1,0 +1,9 @@
+{
+  "gate_id": "filesystem-scope",
+  "action_id": "e2e2f06c-5cea-4289-8b3c-d0a35febd54b",
+  "kind": "delete_file",
+  "payload": {
+    "path": "../../etc/passwd",
+    "is_delete": true
+  }
+}

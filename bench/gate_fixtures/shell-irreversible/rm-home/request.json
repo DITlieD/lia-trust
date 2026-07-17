@@ -1,0 +1,8 @@
+{
+  "gate_id": "shell-irreversible",
+  "action_id": "237540f0-ba13-401c-9313-c29ff9fa578e",
+  "kind": "shell",
+  "payload": {
+    "command": "rm -rf ~/project"
+  }
+}

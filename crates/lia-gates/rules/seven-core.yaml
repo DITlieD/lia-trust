@@ -1,0 +1,45 @@
+policy_id: lia-seven-core
+version: "1"
+rules:
+  - id: test-integrity
+    risk_tier: security
+    required_evidence:
+      - key: wrapper_observation
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: evidence-completeness
+    risk_tier: security
+    required_evidence:
+      - key: completion_evidence
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: filesystem-scope
+    risk_tier: irreversible
+    required_evidence:
+      - key: resolved_path
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: shell-irreversible
+    risk_tier: irreversible
+    required_evidence:
+      - key: command
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: dependency-reality
+    risk_tier: security
+    required_evidence:
+      - key: package
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: secret-output
+    risk_tier: secret
+    required_evidence:
+      - key: shareable_projection
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE
+  - id: journal-tamper
+    risk_tier: security
+    required_evidence:
+      - key: journal_probe
+        kind: present
+    reason_code_on_fail: MISSING_EVIDENCE

@@ -1,0 +1,6 @@
+{
+  "gate_id": "filesystem-scope",
+  "verdict": "deny",
+  "reason_code": "FS_OUT_OF_SCOPE",
+  "exit_code": 2
+}

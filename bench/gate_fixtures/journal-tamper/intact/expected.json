@@ -1,0 +1,6 @@
+{
+  "gate_id": "journal-tamper",
+  "verdict": "allow",
+  "reason_code": "GATE_ALLOW",
+  "exit_code": 0
+}

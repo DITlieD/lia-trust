@@ -1,0 +1,20 @@
+{
+  "gate_id": "test-integrity",
+  "action_id": "72f42c18-e306-4af6-b9a6-54145f271273",
+  "kind": "run_test",
+  "payload": {
+    "claimed_pass": true,
+    "wrapper": {
+      "exit_code": 0,
+      "stdout_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "stderr_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "argv": [
+        "cargo",
+        "test"
+      ],
+      "cwd": "/work/repo",
+      "coverage_profraw_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "wrapper_digest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  }
+}
