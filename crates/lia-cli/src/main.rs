@@ -25,6 +25,10 @@ use lia_policy::{
 use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
 use lia_taint::{check_flows, parse_graph};
+use lia_bench::{
+    claims_lint, probe_bridge, run_arm, verify_bench_bundle, Arm, BenchOptions, Harness,
+    AGENT_MODE_RECORDED,
+};
 use lia_verify::{
     build_demo_bundle, build_gate_receipt_bundle, sign_verification_report, verify_bundle,
     verify_report_signature, write_verification_report, VerificationReport,
@@ -223,6 +227,31 @@ enum Commands {
         key_id: String,
         #[arg(long)]
         run_id: Option<Uuid>,
+    },
+    Bench {
+        #[arg(long)]
+        harness: String,
+        #[arg(long)]
+        arm: String,
+        #[arg(long)]
+        corpus: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "bench")]
+        key_id: String,
+        #[arg(long, default_value = "http://127.0.0.1:8810")]
+        bridge_url: String,
+        #[arg(long, default_value_t = false)]
+        force_recorded: bool,
+    },
+    #[command(name = "claims-lint")]
+    ClaimsLint {
+        #[arg(long, default_value = "docs")]
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
     },
     Mcp {
         #[arg(long)]
@@ -522,6 +551,26 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
         } => run_hook(adapter, config, journal, secret_key_hex, key_id, run_id),
+        Commands::Bench {
+            harness,
+            arm,
+            corpus,
+            out,
+            secret_key_hex,
+            key_id,
+            bridge_url,
+            force_recorded,
+        } => run_bench(
+            harness,
+            arm,
+            corpus,
+            out,
+            secret_key_hex,
+            key_id,
+            bridge_url,
+            force_recorded,
+        ),
+        Commands::ClaimsLint { root, json } => run_claims_lint(root, json),
         Commands::Mcp {
             config,
             journal,
@@ -1066,4 +1115,72 @@ fn emit_verify_report(
         write_verification_report(report, path)?;
     }
     Ok(())
+}
+
+fn run_bench(
+    harness: String,
+    arm: String,
+    corpus: PathBuf,
+    out: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    bridge_url: String,
+    force_recorded: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let harness = Harness::parse(&harness)?;
+    let arm = Arm::parse(&arm).map_err(|e| e)?;
+    let (bridge_ok, model_id) = probe_bridge(&bridge_url);
+    if !bridge_ok && !force_recorded {
+        eprintln!(
+            "bridge unreachable at {bridge_url}; running as {AGENT_MODE_RECORDED}"
+        );
+    }
+    let result = run_arm(&BenchOptions {
+        harness,
+        arm,
+        corpus,
+        out_dir: out.clone(),
+        secret_key_hex,
+        key_id,
+        bridge_url,
+        force_recorded: force_recorded || !bridge_ok,
+    })?;
+    let bundle = out.join(format!("bundle-{}-{}", result.harness, result.arm));
+    let (ok, metrics) = verify_bench_bundle(&bundle)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "result": result,
+            "verify_ok": ok,
+            "recomputed_metrics": metrics,
+            "bridge_model_id": model_id,
+        }))?
+    );
+    if ok {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(1))
+    }
+}
+
+fn run_claims_lint(
+    root: PathBuf,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let findings = claims_lint(&root)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&findings)?);
+    } else {
+        for f in &findings {
+            println!("{}:{}: {} ({})", f.path, f.line, f.reason, f.excerpt);
+        }
+        if findings.is_empty() {
+            println!("claims-lint clean");
+        }
+    }
+    if findings.is_empty() {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(2))
+    }
 }

@@ -1,37 +1,29 @@
 [package]
-name = "lia-cli"
+name = "lia-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "LIA Trust Kernel CLI (lia)"
+description = "LIA empty-harness TRUST-INTEGRITY benchmark"
 publish = false
-
-[[bin]]
-name = "lia"
-path = "src/main.rs"
 
 [dependencies]
 lia-protocol = { workspace = true }
 lia-journal = { workspace = true }
-lia-policy = { workspace = true }
-lia-verify = { workspace = true }
 lia-gates = { workspace = true }
 lia-adapters = { workspace = true }
 lia-ground = { workspace = true }
 lia-syco = { workspace = true }
-lia-ast = { workspace = true }
-lia-taint = { workspace = true }
-lia-bench = { workspace = true }
-clap = { workspace = true }
+lia-verify = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 hex = { workspace = true }
 chrono = { workspace = true }
+sha2 = { workspace = true }
+blake3 = { workspace = true }
+tempfile = { workspace = true }
+walkdir = { workspace = true }
 
 [dev-dependencies]
-lia-journal = { workspace = true }
-lia-verify = { workspace = true }
 tempfile = { workspace = true }
-hex = { workspace = true }

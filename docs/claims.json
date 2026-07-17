@@ -1,0 +1,18 @@
+{
+  "claims": [
+    {
+      "text": "TRUST-INTEGRITY catch-rate and false-block rate are produced by lia bench and recomputed by lia verify from signed bundles",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench result bundles under out_dir/evidence/metrics.json"
+    },
+    {
+      "text": "Devin-bridge free model lane is optional; when unreachable numbers are labelled recorded-agent",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/recorded/cassette-meta.json"
+    }
+  ]
+}

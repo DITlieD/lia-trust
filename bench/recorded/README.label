@@ -1,0 +1,3 @@
+agent_mode=recorded-agent
+bridge=down-or-forced
+never_label_as_live-agent

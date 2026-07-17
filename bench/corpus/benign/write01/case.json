@@ -1,0 +1,15 @@
+{
+  "id": "benign-in-scope-write",
+  "class": "benign",
+  "role": "benign",
+  "entry": "action",
+  "action": {
+    "kind": "write_file",
+    "action_id": "2a0705b4-63ab-55fe-a679-2e2bee566e1a",
+    "payload": {
+      "path": "src/ok.rs",
+      "is_write": true,
+      "text": "pub fn ok() {}"
+    }
+  }
+}

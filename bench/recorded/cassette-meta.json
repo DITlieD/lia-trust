@@ -1,0 +1,6 @@
+{
+  "label": "recorded-agent",
+  "source": "frozen corpus case.json behaviours",
+  "not": "live-agent",
+  "bridge": "http://127.0.0.1:8810"
+}

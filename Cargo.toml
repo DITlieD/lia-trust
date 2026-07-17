@@ -11,6 +11,7 @@ members = [
     "crates/lia-syco",
     "crates/lia-verify",
     "crates/lia-adapters",
+    "crates/lia-bench",
     "crates/lia-cli",
     "tools/lia_wire_check",
     "tools/lia_gate_freeze",
@@ -57,3 +58,4 @@ lia-ground = { path = "crates/lia-ground" }
 lia-syco = { path = "crates/lia-syco" }
 lia-verify = { path = "crates/lia-verify" }
 lia-adapters = { path = "crates/lia-adapters" }
+lia-bench = { path = "crates/lia-bench" }

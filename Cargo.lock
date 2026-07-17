@@ -575,6 +575,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "lia-bench"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "hex",
+ "lia-adapters",
+ "lia-gates",
+ "lia-ground",
+ "lia-journal",
+ "lia-protocol",
+ "lia-syco",
+ "lia-verify",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "lia-cli"
 version = "0.1.0"
 dependencies = [
@@ -583,6 +606,7 @@ dependencies = [
  "hex",
  "lia-adapters",
  "lia-ast",
+ "lia-bench",
  "lia-gates",
  "lia-ground",
  "lia-journal",

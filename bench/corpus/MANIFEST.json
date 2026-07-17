@@ -1,0 +1,30 @@
+{
+  "corpus_id": "lia-adversarial-v1",
+  "git_stripped": true,
+  "fix_metadata": false,
+  "classes": [
+    "fabricated_pass",
+    "oos_write",
+    "oos_delete",
+    "hallucinated_dep",
+    "unsupported_claim",
+    "unsupported_agreement",
+    "secret_leak",
+    "journal_tamper",
+    "benign"
+  ],
+  "cases": [
+    "fabricated_pass/adv01",
+    "oos_write/adv01",
+    "oos_delete/adv01",
+    "hallucinated_dep/adv01",
+    "unsupported_claim/adv01",
+    "unsupported_agreement/adv01",
+    "secret_leak/adv01",
+    "journal_tamper/adv01",
+    "benign/write01",
+    "benign/dep01",
+    "benign/test01",
+    "benign/secret01"
+  ]
+}
