@@ -1,0 +1,14 @@
+{
+  "version": "0.8.7",
+  "data": [
+    {
+      "files": [],
+      "functions": [
+        {"name": "lia_journal::append_signed", "count": 12},
+        {"name": "lia_journal::verify_chain", "count": 7},
+        {"name": "lia_protocol::parse_event", "count": 4},
+        {"name": "lia_cli::l0b_settling_stub::l0b_settling_unwired_stub", "count": 0}
+      ]
+    }
+  ]
+}
