@@ -1,0 +1,17 @@
+# gate-manifest.txt — frozen LIA wiring-gate fileset (R8)
+# Authored once, out-of-band. Read-only to any PR / run being evaluated.
+# A run that modifies any path below is BLOCKED by tools/lia_gate_freeze --check.
+# After a deliberate human-reviewed gate change, re-record the baseline:
+#   cargo run -p lia_gate_freeze -- --lock
+# Paths are relative to the lia-trust repo root.
+
+tools/gate-manifest.txt
+tools/wire-dark-allowlist.txt
+tools/lia_wire_check/Cargo.toml
+tools/lia_wire_check/src/main.rs
+tools/lia_wire_check/src/lib.rs
+tools/lia_gate_freeze/Cargo.toml
+tools/lia_gate_freeze/src/main.rs
+tools/lia_gate_freeze/src/lib.rs
+.github/workflows/wire.yml
+tools/cargo-llvm-cov.pin

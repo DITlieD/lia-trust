@@ -1,0 +1,19 @@
+[package]
+name = "lia_gate_freeze"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LIA R8 gate-manifest freeze / check (content-hash baseline)"
+publish = false
+
+[[bin]]
+name = "lia_gate_freeze"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+blake3 = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

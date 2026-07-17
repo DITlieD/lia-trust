@@ -1,0 +1,7 @@
+# Registered WIRE-DARK symbols (Layer 2 escape).
+# Each row must match a // WIRE-DARK[<unit>] marker within 5 lines of the
+# definition. Missing marker OR missing row = DARK = fail.
+# format: unit<TAB>path<TAB>symbol<TAB>reason
+# Paths relative to repo root. Blank lines and # comments ignored.
+#
+# L0b	tools/lia_wire_check/src/lib.rs	example_registered_dark	scaffold only — remove before IS-0

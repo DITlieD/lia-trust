@@ -1,0 +1,9 @@
+[package]
+name = "lia-ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Stub crate for later LIA units (not implemented in L0)"
+publish = false
+
+[dependencies]

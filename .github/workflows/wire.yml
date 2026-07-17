@@ -1,0 +1,127 @@
+# LIA wiring-gate CI (Unit L0b PRODUCTION_HOOK)
+# Layers 1–4 per tools/README.md. No imports from .elai_cc.
+#
+# Cadence (plan FORK):
+#   every PR:        Layers 1 + 2 + freeze-check
+#   merge + nightly: Layer 3 (cargo-llvm-cov entrypoint coverage)
+#   when L0+L2 live: Layer 4 (runtime receipt-in-journal assertions)
+#
+# IS-0 (after L0 green): seeded wire-dark + frozen-gate edit MUST fail this workflow.
+
+name: wire
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D dead_code"
+  # Settling pin — tools/README.md SETTLING CHECKS
+  CARGO_LLVM_COV_VERSION: "0.8.7"
+
+jobs:
+  layer1_dead_code_and_deps:
+    name: "L1 dead_code + machete"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo check tools (L0b packages; expand to --workspace when L0 green)
+        run: cargo check -p lia_wire_check -p lia_gate_freeze
+      - name: cargo check workspace (dead_code deny via RUSTFLAGS)
+        # PREP-ONLY soft step while L0 crates land. R3 forbids leaving this as a
+        # permanent gate bypass — flip continue-on-error off once L0 is green.
+        run: cargo check --workspace
+        continue-on-error: true
+      - name: cargo-machete
+        # PREP-ONLY soft step; same R3 flip as workspace check after L0 green.
+        uses: bnjbvr/cargo-machete@v0.7.0
+        continue-on-error: true
+
+  layer2_wire_check:
+    name: "L2 lia_wire_check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build lia_wire_check
+        run: cargo build -p lia_wire_check --release
+      - name: producer-without-consumer over PR changeset
+        if: github.event_name == 'pull_request'
+        run: |
+          git diff -U0 origin/${{ github.base_ref }}...HEAD -- '*.rs' > /tmp/changeset.diff || true
+          if [ ! -s /tmp/changeset.diff ]; then
+            echo "no .rs diff; fail-closed require explicit empty pass via allowlist only"
+            # Still run against touched files list if any; empty changeset exits 2
+            ./target/release/lia_wire_check --changeset /tmp/changeset.diff || \
+              ./target/release/lia_wire_check --changeset git:origin/${{ github.base_ref }}
+          else
+            ./target/release/lia_wire_check --changeset /tmp/changeset.diff
+          fi
+      - name: producer-without-consumer over HEAD~1 (push/schedule)
+        if: github.event_name != 'pull_request'
+        run: ./target/release/lia_wire_check --changeset git:HEAD~1 || ./target/release/lia_wire_check --files $(git ls-files '*.rs' | tr '\n' ',')
+
+  freeze_check:
+    name: "R8 lia_gate_freeze --check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build lia_gate_freeze
+        run: cargo build -p lia_gate_freeze --release
+      - name: require lockfile present
+        run: test -f tools/gate-manifest.lock
+      - name: freeze check
+        run: ./target/release/lia_gate_freeze --check
+
+  layer3_entrypoint_coverage:
+    name: "L3 cargo-llvm-cov (merge + nightly)"
+    runs-on: ubuntu-latest
+    # Plan FORK: not every PR — merge-to-main + nightly only
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - name: install cargo-llvm-cov (pinned)
+        run: cargo install cargo-llvm-cov --version "${CARGO_LLVM_COV_VERSION}" --locked
+      - name: version settling assert
+        run: |
+          v=$(cargo llvm-cov --version | head -n1)
+          echo "got: $v"
+          echo "$v" | grep -q "${CARGO_LLVM_COV_VERSION}"
+      - name: instrumented integration smokes + per-function JSON
+        run: |
+          # Waits on L0: real `lia` binary + auditor-owned integration smokes.
+          # Settling smoke (before enabling count==0 BLOCK): see tools/README.md.
+          cargo llvm-cov --workspace --json --output-path coverage/llvm-cov.json \
+            --ignore-filename-regex '(tests?/|/target/)' || {
+            echo "Layer 3 not yet green (L0 incomplete). Job fails closed once L0 lands."
+            exit 1
+          }
+          test -f coverage/llvm-cov.json
+          # Gate logic (post-settling): any NEW production fn with count==0 = BLOCK
+          # unless #[cfg(test)] or registered WIRE-DARK. Implemented by lia_wire_check
+          # Layer-3 consumer once settling smoke passes.
+
+  layer4_runtime_receipt:
+    name: "L4 runtime receipt-in-journal"
+    runs-on: ubuntu-latest
+    # Scaffold only — activate when L0 journal + L2 gates exist
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: assert gate smokes emit signed journal receipts
+        run: |
+          echo "Layer 4: every gate smoke must leave a signed receipt in the journal"
+          echo "Activate when L0 + L2 land; see tools/README.md"
+          exit 1
