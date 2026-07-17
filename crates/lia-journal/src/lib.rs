@@ -334,6 +334,48 @@ impl Journal {
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM journal_rows", [], |r| r.get(0))?;
         Ok(n as u64)
     }
+
+    pub fn load_rows(&self) -> Result<Vec<JournalRow>, JournalError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| JournalError::Integrity("journal lock poisoned".into()))?;
+
+        let mut stmt = conn.prepare(
+            "SELECT seq, run_id, event_json, event_canonical_json, row_hash, prev_hash, receipt_json
+             FROM journal_rows ORDER BY seq ASC",
+        )?;
+
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            let seq: i64 = row.get(0)?;
+            let run_id_str: String = row.get(1)?;
+            let event_json: String = row.get(2)?;
+            let event_canonical_json: String = row.get(3)?;
+            let row_hash: String = row.get(4)?;
+            let prev_hash: String = row.get(5)?;
+            let receipt_json: String = row.get(6)?;
+
+            let run_id: Uuid = run_id_str
+                .parse()
+                .map_err(|e| JournalError::Integrity(format!("bad run_id: {e}")))?;
+            let event: Event = serde_json::from_str(&event_json).map_err(ProtocolError::from)?;
+            let receipt: Receipt =
+                serde_json::from_str(&receipt_json).map_err(ProtocolError::from)?;
+
+            out.push(JournalRow {
+                seq: seq as u64,
+                run_id,
+                event,
+                event_canonical_json,
+                row_hash,
+                prev_hash,
+                receipt: Some(receipt),
+            });
+        }
+        Ok(out)
+    }
 }
 
 pub fn verify_chain(path: impl AsRef<Path>) -> Result<(), JournalError> {

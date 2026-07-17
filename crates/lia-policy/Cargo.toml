@@ -3,7 +3,19 @@ name = "lia-policy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stub crate for later LIA units (not implemented in L0)"
+description = "Rules-as-data gate engine (fail-closed, frozen-for-run, stable reason codes)"
 publish = false
 
 [dependencies]
+lia-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
