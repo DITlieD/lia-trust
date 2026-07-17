@@ -3,13 +3,23 @@ name = "lia-adapters"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "LIA adapter entrypoints (L2: generic gate dispatch stub; L3 expands wrap/hooks)"
+description = "LIA adapters: claude-code hook, codex/MCP proxy, generic wrap, assurance report"
 publish = false
 
 [dependencies]
 lia-gates = { workspace = true }
 lia-protocol = { workspace = true }
+lia-journal = { workspace = true }
+lia-policy = { workspace = true }
+lia-verify = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

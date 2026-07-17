@@ -1,9 +1,14 @@
 use std::fs;
+use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use lia_adapters::{evaluate_generic_action, evaluate_named_gate, GenericAction};
+use lia_adapters::{
+    evaluate_generic_action, evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin,
+    known_adapters, report_for_adapter, wrap, DenialRecord, GenericAction, InspectionContext,
+    RunContext, WrapOptions,
+};
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_gates::{
     load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateConfig,
@@ -176,6 +181,70 @@ enum Commands {
         graph: Option<String>,
         #[arg(long)]
         graph_file: Option<PathBuf>,
+    },
+    Wrap {
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        evidence_dir: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long, default_value_t = true)]
+        watch: bool,
+        #[arg(long)]
+        no_watch: bool,
+        #[arg(last = true)]
+        agent: Vec<String>,
+    },
+    Report {
+        #[arg(long)]
+        adapter: String,
+        #[arg(long)]
+        probe: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Hook {
+        #[arg(long, default_value = "claude-code")]
+        adapter: String,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+    },
+    Mcp {
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        journal: Option<PathBuf>,
+        #[arg(long)]
+        secret_key_hex: Option<String>,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        #[arg(long)]
+        bundle: Option<PathBuf>,
+        #[arg(long)]
+        probe: Option<PathBuf>,
+        #[arg(long)]
+        adapter: Option<String>,
+        #[arg(long)]
+        request: Option<String>,
     },
 }
 
@@ -420,6 +489,62 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             action_id,
         ),
         Commands::Taint { graph, graph_file } => run_taint(graph, graph_file),
+        Commands::Wrap {
+            repo,
+            evidence_dir,
+            config,
+            secret_key_hex,
+            key_id,
+            run_id,
+            watch,
+            no_watch,
+            agent,
+        } => run_wrap(
+            repo,
+            evidence_dir,
+            config,
+            secret_key_hex,
+            key_id,
+            run_id,
+            watch && !no_watch,
+            agent,
+        ),
+        Commands::Report {
+            adapter,
+            probe,
+            json,
+        } => run_report(adapter, probe, json),
+        Commands::Hook {
+            adapter,
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+        } => run_hook(adapter, config, journal, secret_key_hex, key_id, run_id),
+        Commands::Mcp {
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            policy,
+            bundle,
+            probe,
+            adapter,
+            request,
+        } => run_mcp(
+            config,
+            journal,
+            secret_key_hex,
+            key_id,
+            run_id,
+            policy,
+            bundle,
+            probe,
+            adapter,
+            request,
+        ),
     }
 }
 
@@ -652,6 +777,158 @@ fn run_taint(
     match report.verdict {
         lia_taint::TaintVerdict::Allow => Ok(ExitCode::SUCCESS),
         lia_taint::TaintVerdict::Deny => Ok(ExitCode::from(2)),
+    }
+}
+
+fn run_wrap(
+    repo: PathBuf,
+    evidence_dir: PathBuf,
+    config: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    run_id: Option<Uuid>,
+    watch: bool,
+    agent: Vec<String>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let cfg = load_gate_config(&config)?;
+    let run_id = run_id.unwrap_or_else(Uuid::new_v4);
+    let report = wrap(WrapOptions {
+        repo,
+        evidence_dir,
+        run_id,
+        config: cfg,
+        secret_key_hex,
+        key_id,
+        env_allowlist: None,
+        watch,
+        agent_argv: agent,
+    })?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    if report.agent_exit == 0 {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(report.agent_exit as u8))
+    }
+}
+
+fn run_report(
+    adapter: String,
+    probe: PathBuf,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    if !known_adapters().contains(&adapter.as_str()) {
+        return Err(format!(
+            "unknown adapter {adapter}; expected one of {:?}",
+            known_adapters()
+        )
+        .into());
+    }
+    let report = report_for_adapter(&adapter, Some(probe.as_path()))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("{}", report.render_table());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn run_hook(
+    adapter: String,
+    config: PathBuf,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    if adapter != "claude-code" {
+        return Err(format!("hook adapter {adapter} not supported; use claude-code").into());
+    }
+    let mut cfg = load_gate_config(&config)?;
+    let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);
+    cfg.run_id = Some(run_id);
+    let ctx = RunContext {
+        run_id,
+        config: cfg,
+        journal_path: journal,
+        secret_key_hex,
+        key_id: Some(key_id),
+    };
+    let mut raw = String::new();
+    io::stdin().read_to_string(&mut raw)?;
+    let out = handle_pre_tool_stdin(&raw, &ctx)?;
+    println!("{out}");
+    let decision: serde_json::Value = serde_json::from_str(&out)?;
+    let perm = decision
+        .pointer("/hookSpecificOutput/permissionDecision")
+        .and_then(|v| v.as_str())
+        .unwrap_or("deny");
+    if perm == "allow" {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(2))
+    }
+}
+
+fn run_mcp(
+    config: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    policy: Option<PathBuf>,
+    bundle: Option<PathBuf>,
+    probe: Option<PathBuf>,
+    adapter: Option<String>,
+    request: Option<String>,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let cfg = match config {
+        Some(p) => load_gate_config(p)?,
+        None => GateConfig {
+            allowed_roots: vec![PathBuf::from(".")],
+            home_dir: None,
+            cwd: PathBuf::from("."),
+            protected_paths: vec![],
+            registry: Default::default(),
+            env: Default::default(),
+            run_id: None,
+        },
+    };
+    let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);
+    let run_ctx = RunContext {
+        run_id,
+        config: cfg,
+        journal_path: journal.clone(),
+        secret_key_hex,
+        key_id: Some(key_id),
+    };
+    let inspect_ctx = InspectionContext {
+        journal_path: journal,
+        policy_path: policy,
+        bundle_path: bundle,
+        probe_path: probe,
+        adapter,
+        last_denials: Vec::<DenialRecord>::new(),
+    };
+    let raw = match request {
+        Some(s) => s,
+        None => {
+            let mut buf = String::new();
+            io::stdin().read_to_string(&mut buf)?;
+            buf
+        }
+    };
+    let response = handle_jsonrpc(&raw, &run_ctx, &inspect_ctx)?;
+    println!("{}", serde_json::to_string(&response)?);
+    if response.get("error").is_some() {
+        Ok(ExitCode::from(1))
+    } else if response
+        .pointer("/result/isError")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        Ok(ExitCode::from(2))
+    } else {
+        Ok(ExitCode::SUCCESS)
     }
 }
 

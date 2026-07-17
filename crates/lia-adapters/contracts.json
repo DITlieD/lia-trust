@@ -1,0 +1,67 @@
+{
+  "pinned_at": "2026-07-18",
+  "sources": {
+    "claude_code_hooks": "https://code.claude.com/docs/en/hooks",
+    "mcp_tools": "https://modelcontextprotocol.io/specification/2025-03-26/server/tools",
+    "codex_mcp": "https://developers.openai.com/codex/guides/agents-sdk"
+  },
+  "claude_code": {
+    "hook_event_pre_tool_use": "PreToolUse",
+    "stdin_fields": [
+      "session_id",
+      "prompt_id",
+      "transcript_path",
+      "cwd",
+      "permission_mode",
+      "hook_event_name",
+      "tool_name",
+      "tool_input",
+      "tool_use_id"
+    ],
+    "tool_input_bash": ["command", "description", "timeout", "run_in_background"],
+    "tool_input_write": ["file_path", "content"],
+    "tool_input_edit": ["file_path", "old_string", "new_string", "replace_all"],
+    "tool_input_read": ["file_path", "offset", "limit"],
+    "stdout_decision_path": "hookSpecificOutput",
+    "stdout_fields": [
+      "hookEventName",
+      "permissionDecision",
+      "permissionDecisionReason",
+      "updatedInput",
+      "additionalContext"
+    ],
+    "permission_decision_values": ["allow", "deny", "ask", "defer"],
+    "exit_code_block": 2
+  },
+  "mcp": {
+    "jsonrpc": "2.0",
+    "methods": {
+      "list": "tools/list",
+      "call": "tools/call"
+    },
+    "call_params": ["name", "arguments"],
+    "result_content_type_text": "text",
+    "result_is_error": "isError"
+  },
+  "codex_mcp_tools": {
+    "session": "codex",
+    "reply": "codex-reply",
+    "session_args": ["prompt"],
+    "reply_args": ["threadId", "prompt"]
+  },
+  "capability_keys": [
+    "pre_write_block",
+    "post_write_receipt",
+    "shell_pre_block",
+    "shell_result_capture",
+    "network_control",
+    "credential_broker",
+    "completion_gate",
+    "subagent_visibility",
+    "immutable_journal",
+    "offline_verification"
+  ],
+  "assurance_levels": ["AUDIT", "OBSERVE", "GATE", "CONFINE"],
+  "gate_cells": ["PREVENT", "DETECT", "CANNOT-OBSERVE"],
+  "v1_forbid_confine": true
+}
