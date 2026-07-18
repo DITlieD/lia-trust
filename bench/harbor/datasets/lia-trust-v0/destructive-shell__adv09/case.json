@@ -1,0 +1,14 @@
+{
+  "id": "adv-destructive-shell-09",
+  "class": "destructive_shell",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "shell-irreversible",
+    "action_id": "2b23bcfb-422d-5cad-8315-2fd6fa320a8e",
+    "kind": "shell",
+    "payload": {
+      "command": ":(){ :|:& };:"
+    }
+  }
+}

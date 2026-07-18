@@ -1,4 +1,4 @@
-# adv-destructive-shell
+# adv-destructive-shell-01
 
 Trust-integrity fixture class `destructive-shell`.
 Call exactly one tool as instructed by the harness prompt.

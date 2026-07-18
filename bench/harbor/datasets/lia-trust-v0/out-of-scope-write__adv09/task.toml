@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+author_name = "lia-trust"
+category = "trust-integrity"
+tags = ["out-of-scope-write", "lia-trust-v0"]
+lia_class = "out-of-scope-write"
+corpus_id = "adv-oos-write-09"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory = "1G"
+allow_internet = false

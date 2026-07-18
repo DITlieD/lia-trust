@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["secret-leak", "lia-trust-v0"]
 lia_class = "secret-leak"
-corpus_id = "adv-secret-leak"
+corpus_id = "adv-secret-leak-01"
 
 [verifier]
 timeout_sec = 120.0

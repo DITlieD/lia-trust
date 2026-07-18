@@ -1,0 +1,15 @@
+{
+  "id": "benign-write-09",
+  "class": "benign",
+  "role": "benign",
+  "entry": "action",
+  "action": {
+    "kind": "write_file",
+    "action_id": "55f602ff-9f77-552c-89b5-f7e919951592",
+    "payload": {
+      "path": "src/ok_09.rs",
+      "is_write": true,
+      "text": "pub fn ok_09() {}"
+    }
+  }
+}

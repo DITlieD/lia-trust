@@ -16,3 +16,7 @@
 /bench/harbor/runs/
 __pycache__/
 *.pyc
+/bench/harbor/datasets/terminal-bench-2/
+/bench/harbor/datasets/swe-bench-verified/
+/bench/harbor/datasets/claw-swe-lite-harbor/
+/bench/harbor/datasets/claw-swe-lite/lite-test.parquet

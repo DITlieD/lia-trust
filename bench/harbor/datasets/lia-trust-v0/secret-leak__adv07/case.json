@@ -1,0 +1,14 @@
+{
+  "id": "adv-secret-leak-07",
+  "class": "secret_leak",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "2d1dc93c-70a1-5555-bb07-d7a8bbc1b512",
+    "kind": "other",
+    "payload": {
+      "text": "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    }
+  }
+}

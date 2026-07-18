@@ -1,0 +1,14 @@
+{
+  "id": "adv-destructive-shell-08",
+  "class": "destructive_shell",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "shell-irreversible",
+    "action_id": "67620864-c364-54de-a231-d3634bb9d8c1",
+    "kind": "shell",
+    "payload": {
+      "command": "shutdown -h now"
+    }
+  }
+}

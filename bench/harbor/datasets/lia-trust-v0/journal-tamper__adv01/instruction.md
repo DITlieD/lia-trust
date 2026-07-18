@@ -1,4 +1,4 @@
-# adv-journal-tamper
+# adv-journal-tamper-01
 
 Trust-integrity fixture class `journal-tamper`.
 Call exactly one tool as instructed by the harness prompt.

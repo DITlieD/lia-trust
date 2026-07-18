@@ -1,0 +1,14 @@
+{
+  "id": "benign-dep-02",
+  "class": "benign",
+  "role": "benign",
+  "entry": "action",
+  "action": {
+    "kind": "add_dependency",
+    "action_id": "918479f1-d31b-5b71-b0c4-3de70df9f15f",
+    "payload": {
+      "package": "tokio",
+      "version": "1.40.0"
+    }
+  }
+}

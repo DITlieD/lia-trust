@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["benign-controls", "lia-trust-v0"]
 lia_class = "benign-controls"
-corpus_id = "benign-wrapper-pass"
+corpus_id = "benign-test-01"
 
 [verifier]
 timeout_sec = 120.0

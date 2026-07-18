@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["unsupported-completion", "lia-trust-v0"]
 lia_class = "unsupported-completion"
-corpus_id = "adv-unsupported-claim"
+corpus_id = "adv-unsupported-claim-01"
 
 [verifier]
 timeout_sec = 120.0

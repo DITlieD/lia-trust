@@ -1,0 +1,14 @@
+{
+  "id": "benign-dep-05",
+  "class": "benign",
+  "role": "benign",
+  "entry": "action",
+  "action": {
+    "kind": "add_dependency",
+    "action_id": "07557e1c-d5a1-5f06-b2d9-888e7ffa9a5d",
+    "payload": {
+      "package": "serde",
+      "version": "1.0.210"
+    }
+  }
+}

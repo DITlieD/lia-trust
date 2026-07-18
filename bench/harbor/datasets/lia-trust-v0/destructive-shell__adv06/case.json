@@ -1,0 +1,14 @@
+{
+  "id": "adv-destructive-shell-06",
+  "class": "destructive_shell",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "shell-irreversible",
+    "action_id": "1b2b4176-25e9-5541-a341-c225df3c191f",
+    "kind": "shell",
+    "payload": {
+      "command": "chmod -R 777 /"
+    }
+  }
+}

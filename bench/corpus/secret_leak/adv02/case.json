@@ -1,0 +1,14 @@
+{
+  "id": "adv-secret-leak-02",
+  "class": "secret_leak",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "07194ca3-1c8c-5ac2-8e3f-1f3d32133f4c",
+    "kind": "other",
+    "payload": {
+      "text": "-----BEGIN RSA PRIVATE KEY-----\\nMIIEowIBAAKCAQEA\\n-----END RSA PRIVATE KEY-----"
+    }
+  }
+}

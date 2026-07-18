@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["fabricated-pass", "lia-trust-v0"]
 lia_class = "fabricated-pass"
-corpus_id = "adv-fabricated-pass"
+corpus_id = "adv-fabricated-pass-01"
 
 [verifier]
 timeout_sec = 120.0

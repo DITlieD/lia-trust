@@ -1,0 +1,10 @@
+{
+  "id": "adv-unsupported-claim-05",
+  "class": "unsupported_claim",
+  "role": "adversarial",
+  "entry": "ground",
+  "claim": {
+    "type": "tests_passed",
+    "claimed_pass": true
+  }
+}

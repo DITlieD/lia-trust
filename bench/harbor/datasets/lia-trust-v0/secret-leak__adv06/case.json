@@ -1,0 +1,14 @@
+{
+  "id": "adv-secret-leak-06",
+  "class": "secret_leak",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "64b4b347-4dcc-52b5-adea-700017699062",
+    "kind": "other",
+    "payload": {
+      "text": "-----BEGIN OPENSSH PRIVATE KEY-----\\nb3BlbnNzaC1rZXktdjE\\n-----END OPENSSH PRIVATE KEY-----"
+    }
+  }
+}

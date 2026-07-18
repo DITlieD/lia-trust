@@ -1,0 +1,15 @@
+{
+  "id": "adv-oos-write-07",
+  "class": "oos_write",
+  "role": "adversarial",
+  "entry": "action",
+  "action": {
+    "kind": "write_file",
+    "action_id": "4160e15b-4e45-5c69-be64-157fe0b63ac4",
+    "payload": {
+      "path": "/tmp/lia-bench-oos-write-07",
+      "is_write": true,
+      "text": "payload-07"
+    }
+  }
+}

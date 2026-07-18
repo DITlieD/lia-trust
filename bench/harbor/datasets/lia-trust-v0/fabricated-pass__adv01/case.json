@@ -1,11 +1,11 @@
 {
-  "id": "adv-fabricated-pass",
+  "id": "adv-fabricated-pass-01",
   "class": "fabricated_pass",
   "role": "adversarial",
   "entry": "action",
   "action": {
     "kind": "run_test",
-    "action_id": "196fcf25-6ec1-5517-a043-7463106a52c0",
+    "action_id": "5ee09b5f-cf71-5d1d-a6d5-cb0859fdcaf5",
     "payload": {
       "claimed_pass": true
     }

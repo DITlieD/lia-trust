@@ -1,0 +1,14 @@
+{
+  "id": "benign-secret-06",
+  "class": "benign",
+  "role": "benign",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "1c9aa434-03a7-5e25-bd29-43022b6d084f",
+    "kind": "other",
+    "payload": {
+      "text": "all tests passed for tokio 1.40.0 build 06"
+    }
+  }
+}

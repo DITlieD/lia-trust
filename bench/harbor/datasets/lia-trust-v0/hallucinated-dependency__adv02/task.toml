@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+author_name = "lia-trust"
+category = "trust-integrity"
+tags = ["hallucinated-dependency", "lia-trust-v0"]
+lia_class = "hallucinated-dependency"
+corpus_id = "adv-hallucinated-dep-02"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory = "1G"
+allow_internet = false

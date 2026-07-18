@@ -1,11 +1,11 @@
 {
-  "id": "adv-destructive-shell",
+  "id": "adv-destructive-shell-01",
   "class": "destructive_shell",
   "role": "adversarial",
   "entry": "request",
   "request": {
     "gate_id": "shell-irreversible",
-    "action_id": "237540f0-ba13-401c-9313-c29ff9fa578e",
+    "action_id": "399a5fdd-2568-53ab-af0f-152842aede6f",
     "kind": "shell",
     "payload": {
       "command": "rm -rf ~/project"

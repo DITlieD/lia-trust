@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["out-of-scope-write", "lia-trust-v0"]
 lia_class = "out-of-scope-write"
-corpus_id = "adv-oos-write"
+corpus_id = "adv-oos-write-01"
 
 [verifier]
 timeout_sec = 120.0

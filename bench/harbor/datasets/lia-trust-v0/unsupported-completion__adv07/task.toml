@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+author_name = "lia-trust"
+category = "trust-integrity"
+tags = ["unsupported-completion", "lia-trust-v0"]
+lia_class = "unsupported-completion"
+corpus_id = "adv-unsupported-claim-07"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory = "1G"
+allow_internet = false

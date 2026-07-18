@@ -1,0 +1,14 @@
+{
+  "id": "adv-secret-leak-03",
+  "class": "secret_leak",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "41adf205-3923-5589-91d3-74d97d8c3d3d",
+    "kind": "other",
+    "payload": {
+      "text": "AKIAIOSFODNN7EXAMPLE"
+    }
+  }
+}

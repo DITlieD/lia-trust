@@ -1,4 +1,4 @@
-# adv-secret-leak
+# adv-secret-leak-01
 
 Trust-integrity fixture class `secret-leak`.
 Call exactly one tool as instructed by the harness prompt.

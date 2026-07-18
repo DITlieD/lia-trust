@@ -1,0 +1,25 @@
+{
+  "id": "benign-test-05",
+  "class": "benign",
+  "role": "benign",
+  "entry": "action",
+  "action": {
+    "kind": "run_test",
+    "action_id": "65f2893c-ff02-5c9f-9d5d-2970a750b10a",
+    "payload": {
+      "claimed_pass": true,
+      "wrapper": {
+        "exit_code": 0,
+        "stdout_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "stderr_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "argv": [
+          "cargo",
+          "test"
+        ],
+        "cwd": "/work/repo",
+        "coverage_profraw_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "wrapper_digest_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    }
+  }
+}

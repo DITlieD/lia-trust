@@ -14,7 +14,7 @@
       "corpus_rel": "oos_write/adv01"
     },
     {
-      "task_id": "out-of-scope-write__delete01",
+      "task_id": "out-of-scope-write__delete-adv01",
       "class": "out-of-scope-write",
       "corpus_rel": "oos_delete/adv01"
     },
@@ -44,6 +44,326 @@
       "corpus_rel": "journal_tamper/adv01"
     },
     {
+      "task_id": "fabricated-pass__adv02",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv02"
+    },
+    {
+      "task_id": "out-of-scope-write__adv02",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv02"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv02",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv02"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv02",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv02"
+    },
+    {
+      "task_id": "unsupported-completion__adv02",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv02"
+    },
+    {
+      "task_id": "unsupported-agreement__adv02",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv02"
+    },
+    {
+      "task_id": "secret-leak__adv02",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv02"
+    },
+    {
+      "task_id": "journal-tamper__adv02",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv02"
+    },
+    {
+      "task_id": "fabricated-pass__adv03",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv03"
+    },
+    {
+      "task_id": "out-of-scope-write__adv03",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv03"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv03",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv03"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv03",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv03"
+    },
+    {
+      "task_id": "unsupported-completion__adv03",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv03"
+    },
+    {
+      "task_id": "unsupported-agreement__adv03",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv03"
+    },
+    {
+      "task_id": "secret-leak__adv03",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv03"
+    },
+    {
+      "task_id": "journal-tamper__adv03",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv03"
+    },
+    {
+      "task_id": "fabricated-pass__adv04",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv04"
+    },
+    {
+      "task_id": "out-of-scope-write__adv04",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv04"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv04",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv04"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv04",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv04"
+    },
+    {
+      "task_id": "unsupported-completion__adv04",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv04"
+    },
+    {
+      "task_id": "unsupported-agreement__adv04",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv04"
+    },
+    {
+      "task_id": "secret-leak__adv04",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv04"
+    },
+    {
+      "task_id": "journal-tamper__adv04",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv04"
+    },
+    {
+      "task_id": "fabricated-pass__adv05",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv05"
+    },
+    {
+      "task_id": "out-of-scope-write__adv05",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv05"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv05",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv05"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv05",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv05"
+    },
+    {
+      "task_id": "unsupported-completion__adv05",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv05"
+    },
+    {
+      "task_id": "unsupported-agreement__adv05",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv05"
+    },
+    {
+      "task_id": "secret-leak__adv05",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv05"
+    },
+    {
+      "task_id": "journal-tamper__adv05",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv05"
+    },
+    {
+      "task_id": "fabricated-pass__adv06",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv06"
+    },
+    {
+      "task_id": "out-of-scope-write__adv06",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv06"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv06",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv06"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv06",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv06"
+    },
+    {
+      "task_id": "unsupported-completion__adv06",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv06"
+    },
+    {
+      "task_id": "unsupported-agreement__adv06",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv06"
+    },
+    {
+      "task_id": "secret-leak__adv06",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv06"
+    },
+    {
+      "task_id": "journal-tamper__adv06",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv06"
+    },
+    {
+      "task_id": "fabricated-pass__adv07",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv07"
+    },
+    {
+      "task_id": "out-of-scope-write__adv07",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv07"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv07",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv07"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv07",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv07"
+    },
+    {
+      "task_id": "unsupported-completion__adv07",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv07"
+    },
+    {
+      "task_id": "unsupported-agreement__adv07",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv07"
+    },
+    {
+      "task_id": "secret-leak__adv07",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv07"
+    },
+    {
+      "task_id": "journal-tamper__adv07",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv07"
+    },
+    {
+      "task_id": "fabricated-pass__adv08",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv08"
+    },
+    {
+      "task_id": "out-of-scope-write__adv08",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv08"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv08",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv08"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv08",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv08"
+    },
+    {
+      "task_id": "unsupported-completion__adv08",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv08"
+    },
+    {
+      "task_id": "unsupported-agreement__adv08",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv08"
+    },
+    {
+      "task_id": "secret-leak__adv08",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv08"
+    },
+    {
+      "task_id": "journal-tamper__adv08",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv08"
+    },
+    {
+      "task_id": "fabricated-pass__adv09",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv09"
+    },
+    {
+      "task_id": "out-of-scope-write__adv09",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv09"
+    },
+    {
+      "task_id": "out-of-scope-write__delete-adv09",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv09"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv09",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv09"
+    },
+    {
+      "task_id": "unsupported-completion__adv09",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv09"
+    },
+    {
+      "task_id": "unsupported-agreement__adv09",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv09"
+    },
+    {
+      "task_id": "secret-leak__adv09",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv09"
+    },
+    {
+      "task_id": "journal-tamper__adv09",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv09"
+    },
+    {
       "task_id": "benign-controls__write01",
       "class": "benign-controls",
       "corpus_rel": "benign/write01"
@@ -64,10 +384,217 @@
       "corpus_rel": "benign/secret01"
     },
     {
+      "task_id": "benign-controls__write02",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write02"
+    },
+    {
+      "task_id": "benign-controls__dep02",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep02"
+    },
+    {
+      "task_id": "benign-controls__test02",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test02"
+    },
+    {
+      "task_id": "benign-controls__secret02",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret02"
+    },
+    {
+      "task_id": "benign-controls__write03",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write03"
+    },
+    {
+      "task_id": "benign-controls__dep03",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep03"
+    },
+    {
+      "task_id": "benign-controls__test03",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test03"
+    },
+    {
+      "task_id": "benign-controls__secret03",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret03"
+    },
+    {
+      "task_id": "benign-controls__write04",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write04"
+    },
+    {
+      "task_id": "benign-controls__dep04",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep04"
+    },
+    {
+      "task_id": "benign-controls__test04",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test04"
+    },
+    {
+      "task_id": "benign-controls__secret04",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret04"
+    },
+    {
+      "task_id": "benign-controls__write05",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write05"
+    },
+    {
+      "task_id": "benign-controls__dep05",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep05"
+    },
+    {
+      "task_id": "benign-controls__test05",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test05"
+    },
+    {
+      "task_id": "benign-controls__secret05",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret05"
+    },
+    {
+      "task_id": "benign-controls__write06",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write06"
+    },
+    {
+      "task_id": "benign-controls__dep06",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep06"
+    },
+    {
+      "task_id": "benign-controls__test06",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test06"
+    },
+    {
+      "task_id": "benign-controls__secret06",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret06"
+    },
+    {
+      "task_id": "benign-controls__write07",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write07"
+    },
+    {
+      "task_id": "benign-controls__dep07",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep07"
+    },
+    {
+      "task_id": "benign-controls__test07",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test07"
+    },
+    {
+      "task_id": "benign-controls__secret07",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret07"
+    },
+    {
+      "task_id": "benign-controls__write08",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write08"
+    },
+    {
+      "task_id": "benign-controls__dep08",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep08"
+    },
+    {
+      "task_id": "benign-controls__test08",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test08"
+    },
+    {
+      "task_id": "benign-controls__secret08",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret08"
+    },
+    {
+      "task_id": "benign-controls__write09",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write09"
+    },
+    {
+      "task_id": "benign-controls__dep09",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep09"
+    },
+    {
+      "task_id": "benign-controls__test09",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test09"
+    },
+    {
+      "task_id": "benign-controls__secret09",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret09"
+    },
+    {
       "task_id": "destructive-shell__adv01",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/01"
+    },
+    {
+      "task_id": "destructive-shell__adv02",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/02"
+    },
+    {
+      "task_id": "destructive-shell__adv03",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/03"
+    },
+    {
+      "task_id": "destructive-shell__adv04",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/04"
+    },
+    {
+      "task_id": "destructive-shell__adv05",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/05"
+    },
+    {
+      "task_id": "destructive-shell__adv06",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/06"
+    },
+    {
+      "task_id": "destructive-shell__adv07",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/07"
+    },
+    {
+      "task_id": "destructive-shell__adv08",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/08"
+    },
+    {
+      "task_id": "destructive-shell__adv09",
+      "class": "destructive-shell",
+      "corpus_rel": "harbor_only/destructive_shell/09"
+    },
+    {
+      "task_id": "destructive-shell__fixture-rm",
       "class": "destructive-shell",
       "corpus_rel": "gate_fixtures/shell-irreversible/rm-home"
     }
   ],
-  "n_tasks": 13
+  "n_tasks": 118,
+  "n_adv": 82,
+  "n_benign": 36
 }

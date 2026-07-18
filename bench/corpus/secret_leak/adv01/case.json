@@ -1,11 +1,11 @@
 {
-  "id": "adv-secret-leak",
+  "id": "adv-secret-leak-01",
   "class": "secret_leak",
   "role": "adversarial",
   "entry": "request",
   "request": {
     "gate_id": "secret-output",
-    "action_id": "25c8ff87-5f54-5164-80d0-22bc23cfd4c2",
+    "action_id": "929dfc47-468a-50dc-b4fa-1b63c09abfb1",
     "kind": "other",
     "payload": {
       "text": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBg\\n-----END PRIVATE KEY-----"

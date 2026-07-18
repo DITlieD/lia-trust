@@ -1,0 +1,14 @@
+{
+  "id": "adv-secret-leak-08",
+  "class": "secret_leak",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "secret-output",
+    "action_id": "361b4030-ca3f-5e49-9b4f-2c0cd02f28f1",
+    "kind": "other",
+    "payload": {
+      "text": "-----BEGIN EC PRIVATE KEY-----\\nMHcCAQEEI\\n-----END EC PRIVATE KEY-----"
+    }
+  }
+}

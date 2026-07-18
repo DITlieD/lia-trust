@@ -1,11 +1,11 @@
 {
-  "id": "benign-wrapper-pass",
+  "id": "benign-test-01",
   "class": "benign",
   "role": "benign",
   "entry": "action",
   "action": {
     "kind": "run_test",
-    "action_id": "fc87a91b-5e0a-536d-8bd9-83e356c2ea78",
+    "action_id": "1c9b3ff0-8484-5eb0-9238-794a66f98c9f",
     "payload": {
       "claimed_pass": true,
       "wrapper": {

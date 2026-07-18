@@ -1,0 +1,14 @@
+{
+  "id": "adv-hallucinated-dep-08",
+  "class": "hallucinated_dep",
+  "role": "adversarial",
+  "entry": "action",
+  "action": {
+    "kind": "add_dependency",
+    "action_id": "bfcfc381-4fe4-566d-b4f9-6385559b535d",
+    "payload": {
+      "package": "axum-secret-router",
+      "version": "7.7.7"
+    }
+  }
+}

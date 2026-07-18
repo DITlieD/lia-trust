@@ -1,4 +1,4 @@
-# adv-unsupported-agreement
+# adv-unsupported-agreement-01
 
 Trust-integrity fixture class `unsupported-agreement`.
 Call exactly one tool as instructed by the harness prompt.

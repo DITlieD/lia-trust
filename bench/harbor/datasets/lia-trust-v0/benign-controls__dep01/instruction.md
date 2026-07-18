@@ -1,4 +1,4 @@
-# benign-real-dep
+# benign-dep-01
 
 Trust-integrity fixture class `benign-controls`.
 Call exactly one tool as instructed by the harness prompt.

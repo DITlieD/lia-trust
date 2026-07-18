@@ -1,0 +1,11 @@
+{
+  "source": "TokenRhythm/Claw-SWE-Bench lite",
+  "config": "lite",
+  "n": 80,
+  "status": "harbor_dataset_built",
+  "harbor_version": "0.18.0",
+  "dataset_id": "claw-swe-lite-harbor",
+  "copied_from_verified": 10,
+  "generated_skeletons": 70,
+  "note": "70 skeletons use swebench image naming; docker pull may fail until images available"
+}

@@ -1,0 +1,565 @@
+{
+  "n": 80,
+  "instances": [
+    {
+      "instance_id": "apache__druid-14136",
+      "repo": "apache/druid",
+      "language": "Java",
+      "base_commit": "a7d4162195a630c380d75516c24229cc23e25271",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "apache__druid-16875",
+      "repo": "apache/druid",
+      "language": "Java",
+      "base_commit": "483a03f26c7221f10493d86715985a58e61af967",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "apache__lucene-13170",
+      "repo": "apache/lucene",
+      "language": "Java",
+      "base_commit": "3f4413567d2d41ecee16fcfe2c91a4b84bec0df8",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "google__gson-1100",
+      "repo": "google/gson",
+      "language": "Java",
+      "base_commit": "f0aa1118e9ef66ed324f9a63cdfb551cb4e9eca5",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "google__gson-2024",
+      "repo": "google/gson",
+      "language": "Java",
+      "base_commit": "16b42ff5805074126c2e5484450c182773e408a2",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "projectlombok__lombok-2792",
+      "repo": "projectlombok/lombok",
+      "language": "Java",
+      "base_commit": "9b3e84717d301d7a6829420f5849cf1465e73131",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "projectlombok__lombok-3009",
+      "repo": "projectlombok/lombok",
+      "language": "Java",
+      "base_commit": "8bbac04478cb088eedceb4c63dcb45e30f0948ed",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "projectlombok__lombok-3042",
+      "repo": "projectlombok/lombok",
+      "language": "Java",
+      "base_commit": "5155060ddf48b683a902b9d354d0fd07df7a79a1",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "projectlombok__lombok-3215",
+      "repo": "projectlombok/lombok",
+      "language": "Java",
+      "base_commit": "f090e50d0d5d75c121b6170927b1e776160eb37d",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "reactivex__rxjava-7597",
+      "repo": "reactivex/rxjava",
+      "language": "Java",
+      "base_commit": "13a8d83656940dce0c18e8e0a2a17ac157dd1ddb",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "caddyserver__caddy-5995",
+      "repo": "caddyserver/caddy",
+      "language": "Go",
+      "base_commit": "c839a98ff527932fd14460829142c486f4531a7b",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "caddyserver__caddy-6115",
+      "repo": "caddyserver/caddy",
+      "language": "Go",
+      "base_commit": "4512be49a9fa55270e9afa632be9ff6c9560c455",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "gin-gonic__gin-1805",
+      "repo": "gin-gonic/gin",
+      "language": "Go",
+      "base_commit": "70a0aba3e423246be37462cfdaedd510c26c566e",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "gin-gonic__gin-1957",
+      "repo": "gin-gonic/gin",
+      "language": "Go",
+      "base_commit": "09a3650c97ca7ef3a542d428a9fb2c8da8c18002",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "gin-gonic__gin-3820",
+      "repo": "gin-gonic/gin",
+      "language": "Go",
+      "base_commit": "9f598a31aafb92d675f38f1c8371e4ac76f858bf",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "gohugoio__hugo-12562",
+      "repo": "gohugoio/hugo",
+      "language": "Go",
+      "base_commit": "c8dac67defbb512877e974814e196782989b8214",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "gohugoio__hugo-12579",
+      "repo": "gohugoio/hugo",
+      "language": "Go",
+      "base_commit": "9c4e14eb4f890d2a3caad2dcd9209609b7274914",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "hashicorp__terraform-34900",
+      "repo": "hashicorp/terraform",
+      "language": "Go",
+      "base_commit": "f2e4cb411ed6dfd36fd4f9960a74d8f29c7b8882",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "hashicorp__terraform-35611",
+      "repo": "hashicorp/terraform",
+      "language": "Go",
+      "base_commit": "047c1af0b4a9e1e650f3811d011bcb92b2ceb15a",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "prometheus__prometheus-13845",
+      "repo": "prometheus/prometheus",
+      "language": "Go",
+      "base_commit": "25a8d576717f4a69290d6f6755b4a90cfaab08ff",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "burntsushi__ripgrep-2576",
+      "repo": "burntsushi/ripgrep",
+      "language": "Rust",
+      "base_commit": "fed4fea217abbc502f2e823465de903c8f2b623d",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "nushell__nushell-12950",
+      "repo": "nushell/nushell",
+      "language": "Rust",
+      "base_commit": "0c5a67f4e5bf17a2fffbe3cbb54792a6464b3237",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "nushell__nushell-13246",
+      "repo": "nushell/nushell",
+      "language": "Rust",
+      "base_commit": "46ed69ab126015375d5163972ae321715f34874b",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "sharkdp__bat-1892",
+      "repo": "sharkdp/bat",
+      "language": "Rust",
+      "base_commit": "59d4cfb75c1a17a26b2b38956ee08d8c53f04e04",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "sharkdp__bat-2201",
+      "repo": "sharkdp/bat",
+      "language": "Rust",
+      "base_commit": "02a9d191ed06e6e37d4e352f12e25e65e8037dd0",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "tokio-rs__axum-682",
+      "repo": "tokio-rs/axum",
+      "language": "Rust",
+      "base_commit": "5512ebcd23d261a2be5ee07676721b7637ffc054",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "tokio-rs__axum-691",
+      "repo": "tokio-rs/axum",
+      "language": "Rust",
+      "base_commit": "d6ce99190b2d53e5858678264027e656197f0efa",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "tokio-rs__tokio-6724",
+      "repo": "tokio-rs/tokio",
+      "language": "Rust",
+      "base_commit": "0cbf1a5adae81e8ff86ca6d040aeee67cf888262",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "uutils__coreutils-6377",
+      "repo": "uutils/coreutils",
+      "language": "Rust",
+      "base_commit": "e2aa2c74408d46da900cad4a0b764c8760a300ff",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "uutils__coreutils-6575",
+      "repo": "uutils/coreutils",
+      "language": "Rust",
+      "base_commit": "bc0b4880e000b881a1cabc733b2d261f3526d15e",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "axios__axios-5316",
+      "repo": "axios/axios",
+      "language": "JS/TS",
+      "base_commit": "65e8d1e28ce829f47a837e45129730e541950d3c",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "facebook__docusaurus-10130",
+      "repo": "facebook/docusaurus",
+      "language": "JS/TS",
+      "base_commit": "02e38d8ccf7811af27a9c15ddbadf4d26cfc0eab",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "mrdoob__three.js-25687",
+      "repo": "mrdoob/three.js",
+      "language": "JS/TS",
+      "base_commit": "114134e195a451fdbaa8d2e9492d869d5c853814",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-2757",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "b17a932342bfdeeaf1dc0fbe4f436c83e258d6c8",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-3062",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "7556b61bd0d9f72bbd906c3abaebf2b1c9aeacbf",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-3689",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "9457b221fdacd1052ffdb385918e1bab4b10e833",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-4182",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "66cb6a78776b263a2fe4d1283426e699961095d2",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-4245",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "13b0afb7a28adb3149d7125fb2b9c16edbcf8e94",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "preactjs__preact-4316",
+      "repo": "preactjs/preact",
+      "language": "JS/TS",
+      "base_commit": "b820d8b73eade8bc5b3fbf7e5fe0dd5150de80e2",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "vuejs__core-11589",
+      "repo": "vuejs/core",
+      "language": "JS/TS",
+      "base_commit": "3653bc0f45d6fedf84e29b64ca52584359c383c0",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fmtlib__fmt-2310",
+      "repo": "fmtlib/fmt",
+      "language": "C/C++",
+      "base_commit": "7612f18dc8e0112e64e0845a1ebe9da6cfb8a123",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fmtlib__fmt-3248",
+      "repo": "fmtlib/fmt",
+      "language": "C/C++",
+      "base_commit": "840ec8569ddb304345f082bb82d733742f431504",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fmtlib__fmt-3272",
+      "repo": "fmtlib/fmt",
+      "language": "C/C++",
+      "base_commit": "0f42c17d85f26bbbd6a30d71ce8306d371426bfc",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "jqlang__jq-2598",
+      "repo": "jqlang/jq",
+      "language": "C/C++",
+      "base_commit": "4dc2a2fb9df94ec45d107b798173c7db9c695a7f",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "micropython__micropython-13569",
+      "repo": "micropython/micropython",
+      "language": "C/C++",
+      "base_commit": "2d7fb9a715d8c9f1f7ba73a62cfd587fa6ffc24a",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "redis__redis-10095",
+      "repo": "redis/redis",
+      "language": "C/C++",
+      "base_commit": "1e25bdf7808bb400f2dc552ec0d6690d1b340d23",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "redis__redis-12272",
+      "repo": "redis/redis",
+      "language": "C/C++",
+      "base_commit": "7f0a7f0a69318788edeca5a55ce05e278fdaa90b",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "redis__redis-13338",
+      "repo": "redis/redis",
+      "language": "C/C++",
+      "base_commit": "94b9072e44af0bae8cfe2de5cfa4af7b8e399759",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "redis__redis-9733",
+      "repo": "redis/redis",
+      "language": "C/C++",
+      "base_commit": "77d3c6bff30331fb94a8570adc29872368e15ca2",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "valkey-io__valkey-1842",
+      "repo": "valkey-io/valkey",
+      "language": "C/C++",
+      "base_commit": "4de8cf3567b4dfd3a541219462b22d46c730c4b4",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "faker-ruby__faker-2705",
+      "repo": "faker-ruby/faker",
+      "language": "Ruby",
+      "base_commit": "4d52bc1e148d5290da10cb2775e244e0023778b0",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fastlane__fastlane-21857",
+      "repo": "fastlane/fastlane",
+      "language": "Ruby",
+      "base_commit": "c18d01c03cf22b82ff5e2e03f01e59f956684708",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fluent__fluentd-3608",
+      "repo": "fluent/fluentd",
+      "language": "Ruby",
+      "base_commit": "a60603346483da721799ccb3faebcbdd757c5f16",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fluent__fluentd-3631",
+      "repo": "fluent/fluentd",
+      "language": "Ruby",
+      "base_commit": "e890533484dfb7d4546f68a84fdff9a98fb459bd",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "fluent__fluentd-4030",
+      "repo": "fluent/fluentd",
+      "language": "Ruby",
+      "base_commit": "a5bf404134f98f32c5cbcbc2f0989d9f88542853",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "jekyll__jekyll-8047",
+      "repo": "jekyll/jekyll",
+      "language": "Ruby",
+      "base_commit": "ab6ef0b257e4c7aafec0518d93bea3e9c4b75b75",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "jordansissel__fpm-1850",
+      "repo": "jordansissel/fpm",
+      "language": "Ruby",
+      "base_commit": "809c7269442f6b6e4be7c3d480bb4489caa281c5",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "rubocop__rubocop-13396",
+      "repo": "rubocop/rubocop",
+      "language": "Ruby",
+      "base_commit": "3e855b0e2eb51311c690bb809d767653d1a0ee4a",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "rubocop__rubocop-13560",
+      "repo": "rubocop/rubocop",
+      "language": "Ruby",
+      "base_commit": "fd13dabcae2ad9fdf228029671dee6f1ee96248a",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "rubocop__rubocop-13680",
+      "repo": "rubocop/rubocop",
+      "language": "Ruby",
+      "base_commit": "9500c427cf346ba523984d7a692e23a943d57a9f",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "briannesbitt__carbon-2752",
+      "repo": "briannesbitt/carbon",
+      "language": "PHP",
+      "base_commit": "09acf64155c16dc6f580f36569ae89344e9734a3",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "briannesbitt__carbon-2813",
+      "repo": "briannesbitt/carbon",
+      "language": "PHP",
+      "base_commit": "8c019924327fe0251294adb61543981e3d27652c",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "briannesbitt__carbon-3073",
+      "repo": "briannesbitt/carbon",
+      "language": "PHP",
+      "base_commit": "da64770bf83ac06914418db7df14dadd4ded0212",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "briannesbitt__carbon-3103",
+      "repo": "briannesbitt/carbon",
+      "language": "PHP",
+      "base_commit": "d481d8d69a94dc00e5c1b147ec1f7e7492626b12",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "laravel__framework-51195",
+      "repo": "laravel/framework",
+      "language": "PHP",
+      "base_commit": "5362c4aa52beb83078b4c25d980f4d3ff1fff69e",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "laravel__framework-52866",
+      "repo": "laravel/framework",
+      "language": "PHP",
+      "base_commit": "4c7850844e218b4fa25e29c83bc80b7ef06836cb",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "php-cs-fixer__php-cs-fixer-7663",
+      "repo": "php-cs-fixer/php-cs-fixer",
+      "language": "PHP",
+      "base_commit": "c5cde0cf7542234dc061af8a25f77fcdad430e35",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "php-cs-fixer__php-cs-fixer-7998",
+      "repo": "php-cs-fixer/php-cs-fixer",
+      "language": "PHP",
+      "base_commit": "efe7a396a3e5434123011a808cf8d57681713530",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "php-cs-fixer__php-cs-fixer-8331",
+      "repo": "php-cs-fixer/php-cs-fixer",
+      "language": "PHP",
+      "base_commit": "ae2b729efb3507871ddf501424b1a92db4e5b16a",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "phpoffice__phpspreadsheet-3940",
+      "repo": "phpoffice/phpspreadsheet",
+      "language": "PHP",
+      "base_commit": "9b3f2055288f3166374e02f2636071a959b1bf37",
+      "source_dataset": "multilingual"
+    },
+    {
+      "instance_id": "django__django-11790",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "b1d6b35e146aea83b171c1b921178bbaae2795ed",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "django__django-11885",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "04ac9b45a34440fa447feb6ae934687aacbfc5f4",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "django__django-11999",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "84633905273fc916e3d17883810d9969c03f73c2",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "django__django-12143",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "5573a54d409bb98b5c5acdb308310bed02d392c2",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "django__django-12406",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "335c9c94acf263901fb023404408880245b0c4b4",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "django__django-12708",
+      "repo": "django/django",
+      "language": "Python",
+      "base_commit": "447980e72ac01da1594dd3373a03ba40b7ee6f80",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8035",
+      "repo": "sphinx-doc/sphinx",
+      "language": "Python",
+      "base_commit": "5e6da19f0e44a0ae83944fb6ce18f18f781e1a6e",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8056",
+      "repo": "sphinx-doc/sphinx",
+      "language": "Python",
+      "base_commit": "e188d56ed1248dead58f3f8018c0e9a3f99193f7",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8551",
+      "repo": "sphinx-doc/sphinx",
+      "language": "Python",
+      "base_commit": "57ed10c68057c96491acbd3e62254ccfaf9e3861",
+      "source_dataset": "verified-mini"
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-9320",
+      "repo": "sphinx-doc/sphinx",
+      "language": "Python",
+      "base_commit": "e05cef574b8f23ab1b57f57e7da6dee509a4e230",
+      "source_dataset": "verified-mini"
+    }
+  ]
+}

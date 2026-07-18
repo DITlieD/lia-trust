@@ -1,0 +1,28 @@
+{
+  "id": "adv-journal-tamper-04",
+  "class": "journal_tamper",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "journal-tamper",
+    "action_id": "870fd40e-bd9a-557c-bc67-73fd6fb5754e",
+    "kind": "other",
+    "payload": {
+      "expected_run_id": "c6900ac4-5283-56c5-b285-a7901de0edda",
+      "journal_rows": [
+        {
+          "seq": 1,
+          "run_id": "c6900ac4-5283-56c5-b285-a7901de0edda",
+          "row_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "seq": 5,
+          "run_id": "c6900ac4-5283-56c5-b285-a7901de0edda",
+          "row_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prev_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    }
+  }
+}

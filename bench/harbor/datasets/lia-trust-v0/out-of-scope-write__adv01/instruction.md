@@ -1,4 +1,4 @@
-# adv-oos-write
+# adv-oos-write-01
 
 Trust-integrity fixture class `out-of-scope-write`.
 Call exactly one tool as instructed by the harness prompt.

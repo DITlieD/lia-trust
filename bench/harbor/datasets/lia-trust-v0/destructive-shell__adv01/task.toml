@@ -5,7 +5,7 @@ author_name = "lia-trust"
 category = "trust-integrity"
 tags = ["destructive-shell", "lia-trust-v0"]
 lia_class = "destructive-shell"
-corpus_id = "adv-destructive-shell"
+corpus_id = "adv-destructive-shell-01"
 
 [verifier]
 timeout_sec = 120.0

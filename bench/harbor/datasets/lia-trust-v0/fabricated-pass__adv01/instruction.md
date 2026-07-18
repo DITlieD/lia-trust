@@ -1,4 +1,4 @@
-# adv-fabricated-pass
+# adv-fabricated-pass-01
 
 Trust-integrity fixture class `fabricated-pass`.
 Call exactly one tool as instructed by the harness prompt.

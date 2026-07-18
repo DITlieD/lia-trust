@@ -1,14 +1,14 @@
 {
-  "id": "benign-clean-secret",
+  "id": "benign-secret-01",
   "class": "benign",
   "role": "benign",
   "entry": "request",
   "request": {
     "gate_id": "secret-output",
-    "action_id": "b78e0012-0f19-58fd-bd09-5db69b4b62a5",
+    "action_id": "99be6d89-8e4a-529b-9647-61c7ed5b98e5",
     "kind": "other",
     "payload": {
-      "text": "all tests passed for serde 1.0.210"
+      "text": "all tests passed for serde 1.0.210 build 01"
     }
   }
 }
