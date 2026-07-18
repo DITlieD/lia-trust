@@ -15,18 +15,25 @@
       "pointer": "bench/recorded/cassette-meta.json"
     },
     {
-      "text": "tip 5531da7 sequential generic/Devin-bridge live-agent lane OFF then ON [MEASURED]: ON catch_rate 1.0 false_block 0.0 false_open 0.0 n_adv=8 n_benign=4 CI95 [1,1]; OFF catch_rate 0.0 false_open 1.0; lia verify accepted both bundles",
+      "text": "live full-loop runner [MEASURED]: lia bench --require-live calls OpenAI-compatible chat.completions with tools, feeds tool_calls through LIA adapter path, refuses silent recorded/generic-dispatch fallback on API failure",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "/tmp/lia-trust-live-bench/bundle-generic-{off,on}"
+      "pointer": "crates/lia-bench/src/live.rs"
     },
     {
-      "text": "live-agent lane split at tip 5531da7 [MEASURED]: corpus 12 trials are scripted generic-dispatch under live-agent lane label, not a full model-agent tool-loop over all corpus classes; one extra live glm-5-2 via :8810 write_file OOS DENY FS_OUT_OF_SCOPE",
+      "text": "LIVE full-loop TRUST-INTEGRITY aborted [MEASURED]: TokenRouter api.tokenrouter.com /models http=401 Invalid token (request id 20260718015032694054597dpDEeoS) model z-ai/glm-5.2-free key_fp sha256:5b7bc1906b1959fb; no live catch_rate/false_block/false_open claimed",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "/tmp/lia-trust-live-bench/{result-generic-on.json,live_prevent_oos.json,live_tool_oos.json}"
+      "pointer": "/tmp/lia-trust-full-live/stderr.txt"
+    },
+    {
+      "text": "prior tip 5531da7 generic live-agent lane numbers were scripted generic-dispatch under a live label, not a model tool-loop; superseded by live full-loop abort claim above",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "/tmp/lia-trust-live-bench/result-generic-on.json"
     },
     {
       "text": "lia verify-run emits AUDIT-level post-hoc bundles only; prevention is not claimed",

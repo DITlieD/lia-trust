@@ -12,7 +12,6 @@ use lia_adapters::{
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
     claims_lint, probe_bridge, run_arm, verify_bench_bundle, Arm, BenchOptions, Harness,
-    AGENT_MODE_RECORDED,
 };
 use lia_gates::{
     load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateConfig,
@@ -246,6 +245,10 @@ enum Commands {
         bridge_url: String,
         #[arg(long, default_value_t = false)]
         force_recorded: bool,
+        #[arg(long, default_value_t = false)]
+        require_live: bool,
+        #[arg(long)]
+        model: Option<String>,
     },
     #[command(name = "claims-lint")]
     ClaimsLint {
@@ -590,6 +593,8 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             bridge_url,
             force_recorded,
+            require_live,
+            model,
         } => run_bench(
             harness,
             arm,
@@ -599,6 +604,8 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             bridge_url,
             force_recorded,
+            require_live,
+            model,
         ),
         Commands::ClaimsLint { root, json } => run_claims_lint(root, json),
         Commands::VerifyRun {
@@ -1182,14 +1189,21 @@ fn run_bench(
     key_id: String,
     bridge_url: String,
     force_recorded: bool,
+    require_live: bool,
+    model: Option<String>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let harness = Harness::parse(&harness)?;
     let arm = Arm::parse(&arm).map_err(|e| e)?;
-    let (bridge_ok, model_id) = probe_bridge(&bridge_url);
-    if !bridge_ok && !force_recorded {
-        eprintln!(
-            "bridge unreachable at {bridge_url}; running as {AGENT_MODE_RECORDED}"
-        );
+    if force_recorded && require_live {
+        return Err("cannot combine --force-recorded with --require-live".into());
+    }
+    if !require_live && !force_recorded {
+        let (bridge_ok, _) = probe_bridge(&bridge_url);
+        if !bridge_ok {
+            eprintln!(
+                "bridge unreachable at {bridge_url}; recorded path unless live env arms tool-loop"
+            );
+        }
     }
     let result = run_arm(&BenchOptions {
         harness,
@@ -1199,7 +1213,9 @@ fn run_bench(
         secret_key_hex,
         key_id,
         bridge_url,
-        force_recorded: force_recorded || !bridge_ok,
+        force_recorded,
+        require_live,
+        model,
     })?;
     let bundle = out.join(format!("bundle-{}-{}", result.harness, result.arm));
     let (ok, metrics) = verify_bench_bundle(&bundle)?;
@@ -1209,7 +1225,9 @@ fn run_bench(
             "result": result,
             "verify_ok": ok,
             "recomputed_metrics": metrics,
-            "bridge_model_id": model_id,
+            "bridge_model_id": result.bridge_model_id,
+            "agent_mode": result.agent_mode,
+            "model_lane": result.model_lane,
         }))?
     );
     if ok {

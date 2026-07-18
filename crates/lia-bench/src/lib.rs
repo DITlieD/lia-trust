@@ -1,5 +1,6 @@
 mod claims;
 mod corpus;
+mod live;
 mod metrics;
 mod run;
 
@@ -8,6 +9,7 @@ pub use corpus::{
     assert_corpus_hardened, assert_skill_free, corpus_sha256, load_corpus, make_throwaway_repo,
     ActionSpec, CaseClass, CaseRole, CorpusCase, EntryKind, ValueOrRaw,
 };
+pub use live::{LiveEndpoint, LiveTrafficProof};
 pub use metrics::{
     compute_metrics, metrics_match, paired_bootstrap_ci, recompute_metrics_from_trials,
     render_trust_integrity_table, Arm, Interval, TableRow, TrialRecord, TrustIntegrityMetrics,

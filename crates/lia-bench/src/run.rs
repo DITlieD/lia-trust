@@ -123,6 +123,8 @@ pub struct BenchOptions {
     pub key_id: String,
     pub bridge_url: String,
     pub force_recorded: bool,
+    pub require_live: bool,
+    pub model: Option<String>,
 }
 
 pub fn probe_bridge(bridge_url: &str) -> (bool, Option<String>) {
@@ -179,14 +181,14 @@ fn base_config(repo: &Path) -> GateConfig {
     }
 }
 
-fn is_catch_verdict(v: &Verdict) -> bool {
+pub(crate) fn is_catch_verdict(v: &Verdict) -> bool {
     matches!(
         v,
         Verdict::Deny | Verdict::Refuted | Verdict::Unsupported | Verdict::Quarantine
     )
 }
 
-fn worst(outcomes: &[GateOutcome]) -> Option<(Verdict, String)> {
+pub(crate) fn worst(outcomes: &[GateOutcome]) -> Option<(Verdict, String)> {
     if outcomes.is_empty() {
         return None;
     }
@@ -807,12 +809,86 @@ pub fn run_arm(opts: &BenchOptions) -> Result<BenchResultBundle, BenchError> {
     let cases = load_corpus(&opts.corpus)?;
     let corpus_hash = corpus_sha256(&opts.corpus)?;
 
-    let (bridge_ok, model_id) = if opts.force_recorded {
-        (false, None)
+    let live_endpoint = if opts.force_recorded {
+        None
     } else {
-        probe_bridge(&opts.bridge_url)
+        match crate::live::LiveEndpoint::from_env(&opts.bridge_url, opts.model.as_deref()) {
+            Ok(ep) => Some(ep),
+            Err(e) => {
+                if opts.require_live {
+                    return Err(e);
+                }
+                None
+            }
+        }
     };
-    let agent_mode = if bridge_ok && !opts.force_recorded {
+
+    let (bridge_ok, model_id, mut traffic) = if let Some(ep) = &live_endpoint {
+        match ep.probe() {
+            Ok((http, id)) => {
+                let traffic = crate::live::LiveTrafficProof {
+                    base_host: ep.base_host(),
+                    model: ep.model.clone(),
+                    models_http: http,
+                    chat_http: 0,
+                    chat_request_ids: Vec::new(),
+                    key_fingerprint: ep.key_fingerprint(),
+                    key_len: ep.api_key.len(),
+                };
+                (true, id.or_else(|| Some(ep.model.clone())), traffic)
+            }
+            Err(e) => {
+                if opts.require_live || !opts.force_recorded {
+                    return Err(e);
+                }
+                (
+                    false,
+                    None,
+                    crate::live::LiveTrafficProof {
+                        base_host: ep.base_host(),
+                        model: ep.model.clone(),
+                        models_http: 0,
+                        chat_http: 0,
+                        chat_request_ids: Vec::new(),
+                        key_fingerprint: ep.key_fingerprint(),
+                        key_len: ep.api_key.len(),
+                    },
+                )
+            }
+        }
+    } else if opts.require_live {
+        return Err(BenchError::Abort(
+            "require_live set but live endpoint unavailable".into(),
+        ));
+    } else {
+        let (ok, id) = if opts.force_recorded {
+            (false, None)
+        } else {
+            probe_bridge(&opts.bridge_url)
+        };
+        (
+            ok,
+            id,
+            crate::live::LiveTrafficProof {
+                base_host: opts.bridge_url.clone(),
+                model: String::new(),
+                models_http: 0,
+                chat_http: 0,
+                chat_request_ids: Vec::new(),
+                key_fingerprint: "none".into(),
+                key_len: 0,
+            },
+        )
+    };
+
+    let use_live_loop = bridge_ok && live_endpoint.is_some() && !opts.force_recorded;
+    if opts.require_live && !use_live_loop {
+        return Err(BenchError::Abort(
+            "require_live set but live tool-loop not armed; aborting (no recorded fallback)".into(),
+        ));
+    }
+
+    let agent_mode = if use_live_loop {
         AGENT_MODE_LIVE
     } else {
         AGENT_MODE_RECORDED
@@ -842,20 +918,39 @@ pub fn run_arm(opts: &BenchOptions) -> Result<BenchResultBundle, BenchError> {
                     Some("off-arm unblocked".into()),
                 ),
                 Arm::On => {
-                    let (blocked, verdict, reason, detail) = run_case_on(
-                        case,
-                        &opts.harness,
-                        &cfg,
-                        &repo,
-                        &journal,
-                        run_id,
-                        &identity,
-                    )?;
+                    let (blocked, verdict, reason, detail) = if use_live_loop {
+                        let ep = live_endpoint.as_ref().unwrap();
+                        crate::live::run_case_live(
+                            ep,
+                            case,
+                            &opts.harness,
+                            &cfg,
+                            &repo,
+                            &journal,
+                            run_id,
+                            &identity,
+                            &mut traffic,
+                        )?
+                    } else {
+                        run_case_on(
+                            case,
+                            &opts.harness,
+                            &cfg,
+                            &repo,
+                            &journal,
+                            run_id,
+                            &identity,
+                        )?
+                    };
                     trial_from(case, &opts.arm, blocked, verdict, reason, detail)
                 }
             };
             trials.push(trial);
         }
+    }
+
+    if use_live_loop {
+        crate::live::write_traffic_proof(&opts.out_dir, &traffic)?;
     }
 
     let metrics = compute_metrics(&trials);
@@ -867,14 +962,22 @@ pub fn run_arm(opts: &BenchOptions) -> Result<BenchResultBundle, BenchError> {
     }
 
     let finished = Utc::now();
-    let model_lane = match opts.harness {
-        Harness::ClaudeCode => "claude-code/anthropic".into(),
-        Harness::Codex => "codex/openai".into(),
-        Harness::Generic => {
-            if let Some(id) = &model_id {
-                format!("generic/devin-bridge:{id}")
-            } else {
-                "generic/devin-bridge:recorded".into()
+    let model_lane = if use_live_loop {
+        format!(
+            "{}/live-tool-loop:{}",
+            opts.harness.as_str(),
+            model_id.as_deref().unwrap_or("unknown")
+        )
+    } else {
+        match opts.harness {
+            Harness::ClaudeCode => "claude-code/anthropic".into(),
+            Harness::Codex => "codex/openai".into(),
+            Harness::Generic => {
+                if let Some(id) = &model_id {
+                    format!("generic/devin-bridge:{id}")
+                } else {
+                    "generic/devin-bridge:recorded".into()
+                }
             }
         }
     };
