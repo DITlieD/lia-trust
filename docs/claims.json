@@ -8,11 +8,25 @@
       "pointer": "bench result bundles under out_dir/evidence/metrics.json"
     },
     {
-      "text": "L5 number is recorded-agent [MEASURED]; when Devin-bridge free model lane is unreachable numbers stay labelled recorded-agent never live-agent",
+      "text": "L5 TRUST-INTEGRITY number is recorded-agent [MEASURED]; when Devin-bridge free model lane is unreachable numbers stay labelled recorded-agent never live-agent",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/recorded/cassette-meta.json"
+    },
+    {
+      "text": "tip 5531da7 sequential generic/Devin-bridge live-agent lane OFF then ON [MEASURED]: ON catch_rate 1.0 false_block 0.0 false_open 0.0 n_adv=8 n_benign=4 CI95 [1,1]; OFF catch_rate 0.0 false_open 1.0; lia verify accepted both bundles",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "/tmp/lia-trust-live-bench/bundle-generic-{off,on}"
+    },
+    {
+      "text": "live-agent lane split at tip 5531da7 [MEASURED]: corpus 12 trials are scripted generic-dispatch under live-agent lane label, not a full model-agent tool-loop over all corpus classes; one extra live glm-5-2 via :8810 write_file OOS DENY FS_OUT_OF_SCOPE",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "/tmp/lia-trust-live-bench/{result-generic-on.json,live_prevent_oos.json,live_tool_oos.json}"
     },
     {
       "text": "lia verify-run emits AUDIT-level post-hoc bundles only; prevention is not claimed",
