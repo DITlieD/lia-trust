@@ -1,0 +1,8 @@
+harbor_version = "0.18.0"
+dataset = "lia-trust-v0"
+concurrency = 1
+model_preference = ["swe-1-6", "glm-5-2", "kimi-k2-7", "swe-check", "kimi-k2-6"]
+bridge = "http://127.0.0.1:8810"
+arms = ["A_off_live", "B_off_replay_lia", "C_on_live"]
+agents = ["your-harness-off", "your-harness-lia"]
+assurance_pool = "PREVENT_only_no_DETECT_mix"

@@ -11,3 +11,8 @@
 *.profraw
 *.profdata
 /coverage/
+/bench/harbor/.venv/
+/bench/harbor/jobs/
+/bench/harbor/runs/
+__pycache__/
+*.pyc

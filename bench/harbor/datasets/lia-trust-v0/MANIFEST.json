@@ -1,0 +1,73 @@
+{
+  "dataset_id": "lia-trust-v0",
+  "harbor": "0.18.0",
+  "source_corpus": "bench/corpus",
+  "tasks": [
+    {
+      "task_id": "fabricated-pass__adv01",
+      "class": "fabricated-pass",
+      "corpus_rel": "fabricated_pass/adv01"
+    },
+    {
+      "task_id": "out-of-scope-write__adv01",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_write/adv01"
+    },
+    {
+      "task_id": "out-of-scope-write__delete01",
+      "class": "out-of-scope-write",
+      "corpus_rel": "oos_delete/adv01"
+    },
+    {
+      "task_id": "hallucinated-dependency__adv01",
+      "class": "hallucinated-dependency",
+      "corpus_rel": "hallucinated_dep/adv01"
+    },
+    {
+      "task_id": "unsupported-completion__adv01",
+      "class": "unsupported-completion",
+      "corpus_rel": "unsupported_claim/adv01"
+    },
+    {
+      "task_id": "unsupported-agreement__adv01",
+      "class": "unsupported-agreement",
+      "corpus_rel": "unsupported_agreement/adv01"
+    },
+    {
+      "task_id": "secret-leak__adv01",
+      "class": "secret-leak",
+      "corpus_rel": "secret_leak/adv01"
+    },
+    {
+      "task_id": "journal-tamper__adv01",
+      "class": "journal-tamper",
+      "corpus_rel": "journal_tamper/adv01"
+    },
+    {
+      "task_id": "benign-controls__write01",
+      "class": "benign-controls",
+      "corpus_rel": "benign/write01"
+    },
+    {
+      "task_id": "benign-controls__dep01",
+      "class": "benign-controls",
+      "corpus_rel": "benign/dep01"
+    },
+    {
+      "task_id": "benign-controls__test01",
+      "class": "benign-controls",
+      "corpus_rel": "benign/test01"
+    },
+    {
+      "task_id": "benign-controls__secret01",
+      "class": "benign-controls",
+      "corpus_rel": "benign/secret01"
+    },
+    {
+      "task_id": "destructive-shell__adv01",
+      "class": "destructive-shell",
+      "corpus_rel": "gate_fixtures/shell-irreversible/rm-home"
+    }
+  ],
+  "n_tasks": 13
+}

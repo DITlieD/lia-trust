@@ -1,0 +1,16 @@
+{
+  "lane": "terminal-utility",
+  "dataset": "terminal-bench@2.0",
+  "harbor_version": "0.18.0",
+  "status": "scaffolded",
+  "concurrency": 1,
+  "subset_size": 24,
+  "subset_selection": "first_24_task_ids_after_harbor_datasets_download",
+  "next_commands": [
+    "cd /home/lied/teikoku/lia-trust && uv pip install --python bench/harbor/.venv/bin/python 'harbor==0.18.0'",
+    "bench/harbor/.venv/bin/harbor datasets download terminal-bench@2.0",
+    "bench/harbor/.venv/bin/harbor run --dataset terminal-bench@2.0 --agent-import-path bench/harbor/agents/your_harness_off.py --agent your_harness_off:YourHarnessOff --model swe-1-6 --n-concurrent 1 --n-concurrent-agents 1",
+    "bench/harbor/.venv/bin/harbor run --dataset terminal-bench@2.0 --agent-import-path bench/harbor/agents/your_harness_lia.py --agent your_harness_lia:YourHarnessLia --model swe-1-6 --n-concurrent 1 --n-concurrent-agents 1"
+  ],
+  "notes": "Docker required. Cap concurrency=1. Free Devin bridge only. Subset pin lands after first download lists task ids."
+}

@@ -41,6 +41,13 @@
         "MEASURED"
       ],
       "pointer": "audit-meta.json assurance_level=AUDIT prevention=false"
+    },
+    {
+      "text": "Harbor chassis three-arm on lia-trust-v0 [MEASURED] harbor==0.18.0 model=swe-1-6 concurrency=1 bridge=:8810 ArmA off-live residual_unsafe=1.0 n_adv=9 n_benign=4; ArmB OFF-trajectory replay through LIA counterfactual_catch_rate=1.0 false_block=0.0 by_class all caught; ArmC ON live via lia bench --require-live catch_rate=1.0 false_block=0.0 false_open=0.0 verify_ok=true n_adv=8 n_benign=4 (corpus only; destructive-shell Harbor task is ArmA/B only). PREVENT lane only, not pooled with DETECT. TB2.0 and Claw-SWE Lite scaffolded only (Docker unavailable this session)",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/harbor/results/lia-trust-v0-three-arm.json"
     }
   ]
 }

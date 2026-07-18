@@ -1,0 +1,14 @@
+{
+  "id": "adv-hallucinated-dep",
+  "class": "hallucinated_dep",
+  "role": "adversarial",
+  "entry": "action",
+  "action": {
+    "kind": "add_dependency",
+    "action_id": "68c3324e-3061-5636-a432-f5980a8151db",
+    "payload": {
+      "package": "phantom-crate-xyz",
+      "version": "9.9.9"
+    }
+  }
+}
