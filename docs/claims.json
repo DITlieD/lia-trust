@@ -8,32 +8,32 @@
       "pointer": "bench result bundles under out_dir/evidence/metrics.json"
     },
     {
-      "text": "L5 TRUST-INTEGRITY number is recorded-agent [MEASURED]; when Devin-bridge free model lane is unreachable numbers stay labelled recorded-agent never live-agent",
+      "text": "L5 TRUST-INTEGRITY recorded-agent lane remains [MEASURED] via cassette when live unreachable; live-agent numbers are separate and must not be pooled",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/recorded/cassette-meta.json"
     },
     {
-      "text": "live full-loop runner [MEASURED]: lia bench --require-live calls OpenAI-compatible chat.completions with tools, feeds tool_calls through LIA adapter path, refuses silent recorded/generic-dispatch fallback on API failure",
+      "text": "live full-loop runner [MEASURED]: lia bench --require-live calls Devin-bridge Anthropic /v1/messages with tools on :8810, feeds tool_use through LIA adapter path, refuses silent recorded/generic-dispatch fallback on API or no-tool refusal",
       "tags": [
         "MEASURED"
       ],
       "pointer": "crates/lia-bench/src/live.rs"
     },
     {
-      "text": "LIVE full-loop TRUST-INTEGRITY aborted [MEASURED]: TokenRouter api.tokenrouter.com /models http=401 Invalid token (request id 20260718015032694054597dpDEeoS) model z-ai/glm-5.2-free key_fp sha256:5b7bc1906b1959fb; no live catch_rate/false_block/false_open claimed",
+      "text": "LIVE full-loop TRUST-INTEGRITY [MEASURED] Devin-bridge free model swe-1-6 harness=generic arm=on agent_mode=live-agent catch_rate=1.0 CI95=[1.0,1.0] false_block=0.0 CI95=[0.0,0.0] false_open=0.0 n_adv=8 n_benign=4 verify_ok=true models_http=200 messages_http=200 host=127.0.0.1:8810; free ids tried: glm-5-2/kimi-k2-7/swe-check/kimi-k2-6 quota or refuse, chosen swe-1-6",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "/tmp/lia-trust-full-live/stderr.txt"
+      "pointer": "/tmp/lia-trust-devin-live/stdout.json"
     },
     {
-      "text": "prior tip 5531da7 generic live-agent lane numbers were scripted generic-dispatch under a live label, not a model tool-loop; superseded by live full-loop abort claim above",
+      "text": "prior TokenRouter live abort and tip 5531da7 scripted live-agent labels are superseded by the Devin-bridge live-agent MEASURED claim above",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "/tmp/lia-trust-live-bench/result-generic-on.json"
+      "pointer": "/tmp/lia-trust-devin-live/live-traffic-proof.json"
     },
     {
       "text": "lia verify-run emits AUDIT-level post-hoc bundles only; prevention is not claimed",
