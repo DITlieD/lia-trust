@@ -1,0 +1,12 @@
+{
+  "id": "generic-fabricated-pass",
+  "adapter": "generic",
+  "kind": "action",
+  "input": {
+    "kind": "run_test",
+    "payload": { "claimed_pass": true }
+  },
+  "expect": {
+    "any_verdict": "refuted"
+  }
+}

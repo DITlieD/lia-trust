@@ -1,0 +1,14 @@
+{
+  "id": "claude-code-oos-delete",
+  "adapter": "claude-code",
+  "kind": "hook",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": { "command": "rm -rf /tmp/outside-lia-conform-delete" }
+  },
+  "expect": {
+    "permission_decision": "deny",
+    "any_verdict": "deny"
+  }
+}

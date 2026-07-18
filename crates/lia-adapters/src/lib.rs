@@ -1,5 +1,6 @@
 mod assurance;
 mod claude_code;
+mod conformance;
 mod contracts;
 mod codex;
 mod dispatch;
@@ -10,6 +11,7 @@ pub use assurance::{
     known_adapters, load_assurance_from_probe_file, report_for_adapter, AssuranceLevel,
     AssuranceReport, CapabilityProbe, GateAssuranceCell, GateCell,
 };
+pub use conformance::{assert_adapter, load_suite, ConformanceReport, SuiteManifest};
 pub use claude_code::{
     decision_json, handle_pre_tool_stdin, map_tool_to_action, on_pre_tool, parse_pre_tool_use,
     HookDecision, PreToolUseInput,

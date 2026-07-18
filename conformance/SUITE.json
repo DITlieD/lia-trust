@@ -1,0 +1,14 @@
+{
+  "suite_id": "lia-adapter-conformance-v1",
+  "frozen": true,
+  "assurance_truth": "bench/assurance_truth.json",
+  "cases": [
+    "cases/claude-code-fabricated-pass.json",
+    "cases/claude-code-oos-delete.json",
+    "cases/codex-fabricated-pass.json",
+    "cases/codex-oos-delete.json",
+    "cases/generic-fabricated-pass.json",
+    "cases/generic-oos-delete.json",
+    "cases/assurance-rollup.json"
+  ]
+}

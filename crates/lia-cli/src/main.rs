@@ -5,11 +5,15 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{
-    evaluate_generic_action, evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin,
-    known_adapters, report_for_adapter, wrap, DenialRecord, GenericAction, InspectionContext,
-    RunContext, WrapOptions,
+    assert_adapter, evaluate_generic_action, evaluate_named_gate, handle_jsonrpc,
+    handle_pre_tool_stdin, known_adapters, report_for_adapter, wrap, DenialRecord, GenericAction,
+    InspectionContext, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
+use lia_bench::{
+    claims_lint, probe_bridge, run_arm, verify_bench_bundle, Arm, BenchOptions, Harness,
+    AGENT_MODE_RECORDED,
+};
 use lia_gates::{
     load_core_rules, load_gate_config, load_gate_request, write_core_rules, GateConfig,
     GateOutcome, GateRequest,
@@ -25,13 +29,10 @@ use lia_policy::{
 use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
 use lia_taint::{check_flows, parse_graph};
-use lia_bench::{
-    claims_lint, probe_bridge, run_arm, verify_bench_bundle, Arm, BenchOptions, Harness,
-    AGENT_MODE_RECORDED,
-};
 use lia_verify::{
     build_demo_bundle, build_gate_receipt_bundle, sign_verification_report, verify_bundle,
-    verify_report_signature, write_verification_report, VerificationReport,
+    verify_report_signature, verify_run, write_verification_report, VerificationReport,
+    VerifyRunOptions,
 };
 use uuid::Uuid;
 
@@ -250,6 +251,35 @@ enum Commands {
     ClaimsLint {
         #[arg(long, default_value = "docs")]
         root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(name = "verify-run")]
+    VerifyRun {
+        #[arg(long)]
+        base: String,
+        #[arg(long)]
+        head: String,
+        #[arg(long)]
+        evidence: PathBuf,
+        #[arg(long)]
+        repo: Option<PathBuf>,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "verify-run")]
+        key_id: String,
+        #[arg(long)]
+        verifier_secret_key_hex: Option<String>,
+        #[arg(long, default_value = "verifier")]
+        verifier_key_id: String,
+    },
+    Conform {
+        #[arg(long, default_value = "conformance")]
+        suite: PathBuf,
+        #[arg(long)]
+        adapter: Option<String>,
         #[arg(long)]
         json: bool,
     },
@@ -571,6 +601,32 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             force_recorded,
         ),
         Commands::ClaimsLint { root, json } => run_claims_lint(root, json),
+        Commands::VerifyRun {
+            base,
+            head,
+            evidence,
+            repo,
+            out,
+            secret_key_hex,
+            key_id,
+            verifier_secret_key_hex,
+            verifier_key_id,
+        } => run_verify_run(
+            base,
+            head,
+            evidence,
+            repo,
+            out,
+            secret_key_hex,
+            key_id,
+            verifier_secret_key_hex,
+            verifier_key_id,
+        ),
+        Commands::Conform {
+            suite,
+            adapter,
+            json,
+        } => run_conform(suite, adapter, json),
         Commands::Mcp {
             config,
             journal,
@@ -1179,6 +1235,94 @@ fn run_claims_lint(
         }
     }
     if findings.is_empty() {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(2))
+    }
+}
+
+fn run_verify_run(
+    base: String,
+    head: String,
+    evidence: PathBuf,
+    repo: Option<PathBuf>,
+    out: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    verifier_secret_key_hex: Option<String>,
+    verifier_key_id: String,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let repo = repo.unwrap_or_else(|| PathBuf::from("."));
+    let journal_id = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+    let verifier_secret = match verifier_secret_key_hex {
+        Some(s) => s,
+        None => {
+            let mut bytes = hex::decode(&secret_key_hex)?;
+            if bytes.len() != 32 {
+                return Err(format!(
+                    "secret_key_hex must be 32 bytes, got {}",
+                    bytes.len()
+                )
+                .into());
+            }
+            for b in &mut bytes {
+                *b ^= 0x5a;
+            }
+            hex::encode(bytes)
+        }
+    };
+    let verifier_id =
+        SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;
+    let (bundle, run_id) = verify_run(&VerifyRunOptions {
+        repo: &repo,
+        base: &base,
+        head: &head,
+        evidence_dir: &evidence,
+        out_bundle: &out,
+        journal_identity: &journal_id,
+        verifier_identity: &verifier_id,
+    })?;
+    let mut report = verify_bundle(&bundle)?;
+    sign_verification_report(&mut report, &verifier_id)?;
+    verify_report_signature(&report)?;
+    write_verification_report(&report, bundle.join("verification-report.json"))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "bundle": bundle,
+            "run_id": run_id,
+            "assurance_level": "AUDIT",
+            "mode": "verify-run",
+            "prevention": false,
+            "accepted": report.accepted,
+            "reason_code": report.reason_code,
+        }))?
+    );
+    if report.accepted {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::from(1))
+    }
+}
+
+fn run_conform(
+    suite: PathBuf,
+    adapter: Option<String>,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let report = assert_adapter(&suite, adapter.as_deref())?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        for r in &report.results {
+            println!("{}: {} ({})", r.id, if r.ok { "PASS" } else { "FAIL" }, r.detail);
+        }
+        println!(
+            "suite={} passed={} failed={}",
+            report.suite_id, report.passed, report.failed
+        );
+    }
+    if report.failed == 0 {
         Ok(ExitCode::SUCCESS)
     } else {
         Ok(ExitCode::from(2))

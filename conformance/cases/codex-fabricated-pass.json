@@ -1,0 +1,18 @@
+{
+  "id": "codex-fabricated-pass",
+  "adapter": "codex",
+  "kind": "mcp",
+  "input": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "run_test",
+      "arguments": { "claimed_pass": true }
+    }
+  },
+  "expect": {
+    "allowed": false,
+    "any_verdict": "refuted"
+  }
+}

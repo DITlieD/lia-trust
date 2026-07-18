@@ -8,11 +8,18 @@
       "pointer": "bench result bundles under out_dir/evidence/metrics.json"
     },
     {
-      "text": "Devin-bridge free model lane is optional; when unreachable numbers are labelled recorded-agent",
+      "text": "L5 number is recorded-agent [MEASURED]; when Devin-bridge free model lane is unreachable numbers stay labelled recorded-agent never live-agent",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/recorded/cassette-meta.json"
+    },
+    {
+      "text": "lia verify-run emits AUDIT-level post-hoc bundles only; prevention is not claimed",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "audit-meta.json assurance_level=AUDIT prevention=false"
     }
   ]
 }

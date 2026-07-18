@@ -82,6 +82,10 @@ pub struct BundleManifest {
     pub evidence: Vec<EvidenceEntry>,
     #[serde(default)]
     pub evidence_set_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance_level: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -477,6 +481,8 @@ rules:
             bytes: Some(artifact_bytes.len() as u64),
         }],
         evidence_set_path: Some("evidence-set.json".into()),
+        assurance_level: None,
+        mode: None,
     };
     fs::write(
         bundle_dir.join("MANIFEST.json"),
@@ -564,6 +570,8 @@ rules:
             bytes: Some(outcome_json.len() as u64),
         }],
         evidence_set_path: None,
+        assurance_level: None,
+        mode: None,
     };
     fs::write(
         bundle_dir.join("MANIFEST.json"),
@@ -571,6 +579,237 @@ rules:
     )?;
 
     Ok(bundle_dir.to_path_buf())
+}
+
+pub const ASSURANCE_AUDIT: &str = "AUDIT";
+pub const MODE_VERIFY_RUN: &str = "verify-run";
+
+#[derive(Clone)]
+pub struct VerifyRunOptions<'a> {
+    pub repo: &'a Path,
+    pub base: &'a str,
+    pub head: &'a str,
+    pub evidence_dir: &'a Path,
+    pub out_bundle: &'a Path,
+    pub journal_identity: &'a SigningIdentity,
+    pub verifier_identity: &'a SigningIdentity,
+}
+
+pub fn verify_run(opts: &VerifyRunOptions<'_>) -> Result<(PathBuf, Uuid), VerifyError> {
+    let bundle_dir = opts.out_bundle;
+    fs::create_dir_all(bundle_dir.join("evidence/supplied"))?;
+
+    let diff = git_diff(opts.repo, opts.base, opts.head)?;
+    let diff_rel = "evidence/diff.patch";
+    fs::write(bundle_dir.join(diff_rel), &diff)?;
+    let diff_sha = sha256_hex(&diff);
+
+    let mut evidence_entries = vec![EvidenceEntry {
+        id: "diff".into(),
+        kind: "git_diff".into(),
+        relative_path: diff_rel.into(),
+        sha256: diff_sha.clone(),
+        bytes: Some(diff.len() as u64),
+    }];
+
+    let mut evidence_items = BTreeMap::new();
+    evidence_items.insert(
+        "diff".to_string(),
+        EvidenceItem {
+            sha256: Some(diff_sha.clone()),
+            value: None,
+            bytes: Some(diff.len() as u64),
+        },
+    );
+
+    if opts.evidence_dir.is_dir() {
+        collect_supplied_evidence(
+            opts.evidence_dir,
+            bundle_dir,
+            &mut evidence_entries,
+            &mut evidence_items,
+        )?;
+    } else if opts.evidence_dir.exists() {
+        return Err(VerifyError::Bundle(format!(
+            "evidence path is not a directory: {}",
+            opts.evidence_dir.display()
+        )));
+    }
+
+    let policy_yaml = r#"
+policy_id: verify-run-audit
+version: "1"
+rules:
+  - id: diff-present
+    risk_tier: quality
+    required_evidence:
+      - key: diff
+        kind: sha256
+    on_fail: advisory
+    reason_code_on_fail: MISSING_EVIDENCE
+"#;
+    let policy_path = bundle_dir.join("policy.frozen.yaml");
+    fs::write(&policy_path, policy_yaml)?;
+    let frozen = freeze_policy_from_path(&policy_path)?;
+
+    let evidence_set = EvidenceSet {
+        items: evidence_items,
+    };
+    fs::write(
+        bundle_dir.join("evidence-set.json"),
+        serde_json::to_vec_pretty(&evidence_set)?,
+    )?;
+
+    let run_id = Uuid::new_v4();
+    let journal_path = bundle_dir.join("journal.db");
+    let journal = Journal::create(&journal_path)?;
+    let event = Event::EvidenceCaptured(lia_protocol::EvidenceCaptured {
+        evidence_id: Uuid::new_v4(),
+        kind: "git_diff".into(),
+        path: Some(diff_rel.into()),
+        sha256: diff_sha,
+        bytes: Some(diff.len() as u64),
+        timestamp: Utc::now(),
+    });
+    journal.append_signed(run_id, event, opts.journal_identity)?;
+
+    for entry in evidence_entries.iter().skip(1) {
+        let event = Event::EvidenceCaptured(lia_protocol::EvidenceCaptured {
+            evidence_id: Uuid::new_v4(),
+            kind: entry.kind.clone(),
+            path: Some(entry.relative_path.clone()),
+            sha256: entry.sha256.clone(),
+            bytes: entry.bytes,
+            timestamp: Utc::now(),
+        });
+        journal.append_signed(run_id, event, opts.journal_identity)?;
+    }
+
+    let rows = journal.load_rows()?;
+    write_action_stream(&bundle_dir.join("action-stream.jsonl"), &rows)?;
+
+    let trust_root = TrustRoot {
+        keys: vec![
+            opts.journal_identity.signer_identity(),
+            opts.verifier_identity.signer_identity(),
+        ],
+    };
+    fs::write(
+        bundle_dir.join("trust-root.json"),
+        serde_json::to_vec_pretty(&trust_root)?,
+    )?;
+
+    let signing_config = SigningConfigSnapshot {
+        gate_manifest_version: lia_protocol::GATE_MANIFEST_VERSION.to_string(),
+        journal_signer_key_id: opts.journal_identity.key_id.clone(),
+        verifier_signer_key_id: opts.verifier_identity.key_id.clone(),
+        captured_at: Utc::now(),
+    };
+    fs::write(
+        bundle_dir.join("signing-config.json"),
+        serde_json::to_vec_pretty(&signing_config)?,
+    )?;
+
+    let meta = serde_json::json!({
+        "assurance_level": ASSURANCE_AUDIT,
+        "mode": MODE_VERIFY_RUN,
+        "base": opts.base,
+        "head": opts.head,
+        "prevention": false,
+        "label": "AUDIT post-hoc verify-run; not prevention",
+    });
+    fs::write(bundle_dir.join("audit-meta.json"), serde_json::to_vec_pretty(&meta)?)?;
+
+    let manifest = BundleManifest {
+        bundle_version: BUNDLE_VERSION.to_string(),
+        run_id,
+        policy_hash: frozen.policy_hash,
+        journal_path: "journal.db".into(),
+        policy_path: "policy.frozen.yaml".into(),
+        trust_root_path: "trust-root.json".into(),
+        signing_config_path: "signing-config.json".into(),
+        action_stream_path: "action-stream.jsonl".into(),
+        evidence: evidence_entries,
+        evidence_set_path: Some("evidence-set.json".into()),
+        assurance_level: Some(ASSURANCE_AUDIT.into()),
+        mode: Some(MODE_VERIFY_RUN.into()),
+    };
+    fs::write(
+        bundle_dir.join("MANIFEST.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+
+    Ok((bundle_dir.to_path_buf(), run_id))
+}
+
+fn git_diff(repo: &Path, base: &str, head: &str) -> Result<Vec<u8>, VerifyError> {
+    let output = std::process::Command::new("git")
+        .args(["-C", &repo.display().to_string(), "diff", "--binary", base, head])
+        .output()
+        .map_err(|e| VerifyError::Bundle(format!("git diff failed to spawn: {e}")))?;
+    if !output.status.success() {
+        return Err(VerifyError::Bundle(format!(
+            "git diff {}..{} failed: {}",
+            base,
+            head,
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    Ok(output.stdout)
+}
+
+fn collect_supplied_evidence(
+    src: &Path,
+    bundle_dir: &Path,
+    entries: &mut Vec<EvidenceEntry>,
+    items: &mut BTreeMap<String, EvidenceItem>,
+) -> Result<(), VerifyError> {
+    let mut stack = vec![src.to_path_buf()];
+    let mut idx = 0u32;
+    while let Some(dir) = stack.pop() {
+        let read = fs::read_dir(&dir).map_err(VerifyError::Io)?;
+        for ent in read {
+            let ent = ent.map_err(VerifyError::Io)?;
+            let path = ent.path();
+            let ft = ent.file_type().map_err(VerifyError::Io)?;
+            if ft.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            let rel = path
+                .strip_prefix(src)
+                .map_err(|e| VerifyError::Bundle(e.to_string()))?;
+            let dest_rel = PathBuf::from("evidence/supplied").join(rel);
+            let dest = bundle_dir.join(&dest_rel);
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&path, &dest)?;
+            let bytes = fs::read(&dest)?;
+            let sha = sha256_hex(&bytes);
+            let id = format!("supplied-{idx}");
+            idx += 1;
+            items.insert(
+                id.clone(),
+                EvidenceItem {
+                    sha256: Some(sha.clone()),
+                    value: None,
+                    bytes: Some(bytes.len() as u64),
+                },
+            );
+            entries.push(EvidenceEntry {
+                id,
+                kind: "supplied".into(),
+                relative_path: dest_rel.to_string_lossy().into_owned(),
+                sha256: sha,
+                bytes: Some(bytes.len() as u64),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn load_manifest(bundle_dir: &Path) -> Result<BundleManifest, VerifyError> {

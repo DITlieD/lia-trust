@@ -1,0 +1,9 @@
+{
+  "id": "assurance-rollup",
+  "adapter": "all",
+  "kind": "assurance",
+  "input": {},
+  "expect": {
+    "match_truth": true
+  }
+}

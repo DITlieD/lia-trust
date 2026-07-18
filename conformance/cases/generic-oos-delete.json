@@ -1,0 +1,12 @@
+{
+  "id": "generic-oos-delete",
+  "adapter": "generic",
+  "kind": "action",
+  "input": {
+    "kind": "delete_file",
+    "payload": { "path": "/tmp/outside-lia-conform-delete", "is_delete": true }
+  },
+  "expect": {
+    "any_verdict": "deny"
+  }
+}

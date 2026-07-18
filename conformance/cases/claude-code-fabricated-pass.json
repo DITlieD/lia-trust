@@ -1,0 +1,14 @@
+{
+  "id": "claude-code-fabricated-pass",
+  "adapter": "claude-code",
+  "kind": "hook",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": { "command": "echo lia-fabricate-pass" }
+  },
+  "expect": {
+    "permission_decision": "deny",
+    "any_verdict": "refuted"
+  }
+}

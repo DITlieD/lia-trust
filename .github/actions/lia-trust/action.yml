@@ -1,0 +1,52 @@
+name: lia-trust
+description: Run LIA Trust Kernel in CI and emit a signed AUDIT bundle artifact
+inputs:
+  repo:
+    description: Repository path to audit
+    required: false
+    default: ${{ github.workspace }}
+  base:
+    description: Base git revision
+    required: false
+    default: HEAD~1
+  head:
+    description: Head git revision
+    required: false
+    default: HEAD
+  evidence:
+    description: Evidence directory for verify-run
+    required: false
+    default: .
+  secret_key_hex:
+    description: 32-byte hex secret for journal signing
+    required: true
+  out:
+    description: Output bundle directory
+    required: false
+    default: lia-bundle
+  lia_bin:
+    description: Path to lia binary (built if empty)
+    required: false
+    default: ""
+outputs:
+  bundle:
+    description: Path to signed AUDIT bundle
+    value: ${{ steps.run.outputs.bundle }}
+  assurance_level:
+    description: Always AUDIT for this action
+    value: AUDIT
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        LIA_REPO: ${{ inputs.repo }}
+        LIA_BASE: ${{ inputs.base }}
+        LIA_HEAD: ${{ inputs.head }}
+        LIA_EVIDENCE: ${{ inputs.evidence }}
+        LIA_SECRET_KEY_HEX: ${{ inputs.secret_key_hex }}
+        LIA_OUT: ${{ inputs.out }}
+        LIA_BIN: ${{ inputs.lia_bin }}
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+      run: bash "${{ github.action_path }}/entrypoint.sh"
