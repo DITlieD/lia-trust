@@ -1,0 +1,72 @@
+{
+  "job": "bench/harbor/runs/tb2-off/2026-07-19__01-58-07",
+  "status": "MEASURED",
+  "finished_at": "2026-07-19T04:06:47.610833",
+  "n_total": 24,
+  "stats": {
+    "n_completed_trials": 24,
+    "n_errored_trials": 2,
+    "n_running_trials": 0,
+    "n_pending_trials": 0,
+    "n_cancelled_trials": 0,
+    "n_retries": 0,
+    "evals": {
+      "terminus-2__swe-1-6__terminal-bench-2": {
+        "n_trials": 24,
+        "n_errors": 2,
+        "metrics": [
+          {
+            "mean": 0.375
+          }
+        ],
+        "pass_at_k": {},
+        "reward_stats": {
+          "reward": {
+            "0.0": [
+              "gpt2-codegolf__5YYVgkw",
+              "hf-model-inference__ron5s5Y",
+              "cancel-async-tasks__xNuNmM3",
+              "adaptive-rejection-sampler__9GVeNNr",
+              "largest-eigenval__BYsLGZV",
+              "db-wal-recovery__owYqJFT",
+              "extract-elf__urmvabv",
+              "overfull-hbox__xQTZajy",
+              "cobol-modernization__5ZVnbvZ",
+              "count-dataset-tokens__Rj427BJ",
+              "build-cython-ext__MkpxcMQ",
+              "gcode-to-text__Zq2yRYk",
+              "kv-store-grpc__dPXivLA",
+              "chess-best-move__o5eX5Nf",
+              "fix-code-vulnerability__dQryLzy"
+            ],
+            "1.0": [
+              "configure-git-webserver__7Gxwxxz",
+              "fix-git__QXgdNfd",
+              "git-leak-recovery__HJbzMiM",
+              "modernize-scientific-stack__XVPK2yg",
+              "crack-7z-hash__E7aRefX",
+              "headless-terminal__grdsu6g",
+              "git-multibranch__UDQCW54",
+              "build-pmars__NB5Pueu",
+              "log-summary-date-ranges__C6RBy6c"
+            ]
+          }
+        },
+        "exception_stats": {
+          "AgentTimeoutError": [
+            "gpt2-codegolf__5YYVgkw",
+            "adaptive-rejection-sampler__9GVeNNr"
+          ]
+        }
+      }
+    },
+    "n_input_tokens": 12902446,
+    "n_cache_tokens": 0,
+    "n_output_tokens": 309858,
+    "cost_usd": null
+  },
+  "mean_reward": 0.375,
+  "n_input_tokens": 12902446,
+  "n_output_tokens": 309858,
+  "updated_at": "2026-07-18T19:25:53.523611+00:00"
+}
