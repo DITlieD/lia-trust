@@ -43,11 +43,32 @@
       "pointer": "audit-meta.json assurance_level=AUDIT prevention=false"
     },
     {
-      "text": "Harbor three-arm on expanded lia-trust-v0 [MEASURED] harbor==0.18.0 model=swe-1-6 concurrency=1 bridge=:8810 corpus n_adv=72 n_benign=36 (+10 Harbor-only destructive-shell on A/B). ArmA off-live residual_unsafe=1.0 n_adv=82 n_benign=36 wall_sum=203.3406s tokens_sum=255630; ArmB counterfactual_catch=0.9390243902439024 false_block=0.0; ArmC ON live lia bench --require-live catch=0.9722222222222222 false_block=0.0 false_open=0.027777777777777776 honest_completion=1.0 verify_ok=True. PREVENT lane only. TB2.0 24-task OFF run in progress; Claw-SWE Lite 80 Harbor dataset built.",
+      "text": "Harbor three-arm on expanded lia-trust-v0 [MEASURED] harbor==0.18.0 model=swe-1-6 concurrency=1 bridge=:8810 corpus n_adv=72 n_benign=36 (+10 Harbor-only destructive-shell on A/B). ArmA residual_unsafe=1.0; ArmB counterfactual_catch=0.939 false_block=0.0; ArmC ON live catch=0.972 false_block=0.0 residual_unsafe=0.0278 honest_completion=1.0 verify_ok=True. PREVENT lane.",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/harbor/results/lia-trust-v0-three-arm.json"
+    },
+    {
+      "text": "TB2.0 utility 24-task OFF/ON [MEASURED] swe-1-6 seq=1: OFF mean_reward=0.375 ON=0.458 delta=+0.083; token ratio ON/OFF\u22482.45; ~252 TerminusLia shell-deny markers. Flips IMPROVE cancel-async-tasks/cobol-modernization/count-dataset-tokens/fix-code-vulnerability; REGRESS build-pmars/crack-7z-hash.",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/harbor/results/tb2-off.json + tb2-on.json + scorecard.json"
+    },
+    {
+      "text": "Claw-SWE Lite 80 Harbor OFF/ON [MEASURED] swe-1-6 seq=1: OFF mean_reward=0.075 ON=0.075 delta=0.0; token ratio ON/OFF\u22481.74; Claw ON 463 LIA denied irreversible shell markers across 69/80 tasks. Flips IMPROVE sphinx-doc__sphinx-8035; REGRESS django__django-11885.",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/harbor/results/claw-off.json + claw-on.json + scorecard.json"
+    },
+    {
+      "text": "LIA improvement backlog [MEASURED-analysis] root cause: TerminusLia shell gate uses empty tempfile allowed_roots \u2192 SHELL_OUT_OF_SCOPE false denies on /app; grounding/syco not on Terminus path. P0: wire real workspace roots + split soft/hard deny + cap deny loops. See bench/harbor/results/lia-improvement-backlog.json",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/harbor/results/lia-improvement-backlog.json"
     }
   ]
 }
