@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-18T22:13:32.992407+00:00",
+  "generated_at": "2026-07-19T12:54:22.280060+00:00",
   "harbor_version": "0.18.0",
   "model": "swe-1-6",
   "bridge": "http://127.0.0.1:8810",
@@ -244,9 +244,136 @@
       }
     },
     "claw-swe-lite": {
-      "status": "PENDING",
+      "status": "OFF_DONE",
       "n_tasks": 80,
-      "off": null,
+      "off": {
+        "job": "bench/harbor/runs/claw-off/2026-07-19__07-42-36",
+        "status": "MEASURED",
+        "finished_at": "2026-07-19T21:52:21.167247",
+        "n_total": 80,
+        "stats": {
+          "n_completed_trials": 80,
+          "n_errored_trials": 3,
+          "n_running_trials": 0,
+          "n_pending_trials": 0,
+          "n_cancelled_trials": 0,
+          "n_retries": 0,
+          "evals": {
+            "terminus-2__swe-1-6__claw-swe-lite-harbor": {
+              "n_trials": 80,
+              "n_errors": 3,
+              "metrics": [
+                {
+                  "mean": 0.075
+                }
+              ],
+              "pass_at_k": {},
+              "reward_stats": {
+                "reward": {
+                  "0.0": [
+                    "vuejs__core-11589__VfuS8EG",
+                    "django__django-12406__kaxdqSv",
+                    "django__django-11790__yb7fmyr",
+                    "gin-gonic__gin-1957__g5fyjB7",
+                    "tokio-rs__tokio-6724__opmNggk",
+                    "sphinx-doc__sphinx-8056__LUFMYnr",
+                    "projectlombok__lombok-2792__MJz8o7A",
+                    "briannesbitt__carbon-3073__YLkeH4r",
+                    "nushell__nushell-12950__uN2pBKX",
+                    "rubocop__rubocop-13396__mxQGFGU",
+                    "valkey-io__valkey-1842__rFXjSZe",
+                    "redis__redis-9733__8aFQ7fU",
+                    "php-cs-fixer__php-cs-fixer-7663__WLj3khs",
+                    "fluent__fluentd-4030__QGAxGtC",
+                    "jordansissel__fpm-1850__9KJDhsA",
+                    "uutils__coreutils-6377__cPkKidi",
+                    "fmtlib__fmt-3248__HiNuzyQ",
+                    "sharkdp__bat-1892__cYPcrzD",
+                    "sharkdp__bat-2201__Xp76nEL",
+                    "apache__druid-16875__NkDFGnR",
+                    "redis__redis-10095__EgpRrKq",
+                    "redis__redis-13338__tRGMknm",
+                    "sphinx-doc__sphinx-8035__4ogRyns",
+                    "nushell__nushell-13246__xSSs6W2",
+                    "redis__redis-12272__AJcxMTP",
+                    "fluent__fluentd-3631__QueWrYN",
+                    "rubocop__rubocop-13560__EF9fXJa",
+                    "briannesbitt__carbon-2813__TXWsB4k",
+                    "caddyserver__caddy-6115__CYfm9Vq",
+                    "caddyserver__caddy-5995__x8qhDx8",
+                    "preactjs__preact-3689__yVMpREC",
+                    "php-cs-fixer__php-cs-fixer-7998__Md6i3Si",
+                    "faker-ruby__faker-2705__6AkK93s",
+                    "axios__axios-5316__KP759Pk",
+                    "projectlombok__lombok-3215__UUr374V",
+                    "briannesbitt__carbon-3103__V46M4es",
+                    "preactjs__preact-3062__KyNaMxo",
+                    "fmtlib__fmt-2310__okZCeSS",
+                    "preactjs__preact-4182__Q4tRENF",
+                    "hashicorp__terraform-35611__MuBvuQ9",
+                    "burntsushi__ripgrep-2576__zpqr8XR",
+                    "gin-gonic__gin-1805__njdMzAY",
+                    "reactivex__rxjava-7597__caR5Mph",
+                    "hashicorp__terraform-34900__iapF3Uv",
+                    "php-cs-fixer__php-cs-fixer-8331__HTdM2Bw",
+                    "google__gson-1100__CVMHLrf",
+                    "uutils__coreutils-6575__Nsj43bQ",
+                    "fluent__fluentd-3608__C4j9x9p",
+                    "rubocop__rubocop-13680__tvFvCiz",
+                    "gohugoio__hugo-12562__UJxjmpV",
+                    "gin-gonic__gin-3820__ZC2cMWu",
+                    "jekyll__jekyll-8047__7YnfUQD",
+                    "laravel__framework-52866__mEwfmjE",
+                    "phpoffice__phpspreadsheet-3940__2mYBSBw",
+                    "micropython__micropython-13569__XdE42yu",
+                    "preactjs__preact-2757__5hdaf36",
+                    "laravel__framework-51195__kaacVjU",
+                    "apache__druid-14136__u8SADoR",
+                    "jqlang__jq-2598__f3hAgDZ",
+                    "prometheus__prometheus-13845__CNrcxgq",
+                    "tokio-rs__axum-682__vjeZpF2",
+                    "tokio-rs__axum-691__rotHpEV",
+                    "facebook__docusaurus-10130__QYCkPx5",
+                    "projectlombok__lombok-3042__NXdS2tF",
+                    "preactjs__preact-4316__VHSvGQA",
+                    "fastlane__fastlane-21857__PrAM3Wf",
+                    "gohugoio__hugo-12579__x8pupW7",
+                    "projectlombok__lombok-3009__8sx7dHs",
+                    "mrdoob__three.js-25687__tJJaq3u",
+                    "apache__lucene-13170__XcKxKJy",
+                    "preactjs__preact-4245__RYcrvce",
+                    "google__gson-2024__ZAsZEev",
+                    "fmtlib__fmt-3272__V2Q4EXd",
+                    "briannesbitt__carbon-2752__E9ArLUe"
+                  ],
+                  "1.0": [
+                    "django__django-11999__ezTDUPx",
+                    "sphinx-doc__sphinx-8551__X7HLotN",
+                    "django__django-11885__EDsamWS",
+                    "django__django-12708__4uNKAgr",
+                    "sphinx-doc__sphinx-9320__DmhhBp9",
+                    "django__django-12143__QBg5tto"
+                  ]
+                }
+              },
+              "exception_stats": {
+                "AgentTimeoutError": [
+                  "projectlombok__lombok-2792__MJz8o7A",
+                  "projectlombok__lombok-3215__UUr374V",
+                  "preactjs__preact-4182__Q4tRENF"
+                ]
+              }
+            }
+          },
+          "n_input_tokens": 228076101,
+          "n_cache_tokens": 0,
+          "n_output_tokens": 1619733,
+          "cost_usd": null
+        },
+        "mean_reward": 0.075,
+        "n_input_tokens": 228076101,
+        "n_output_tokens": 1619733
+      },
       "on": null,
       "delta": null
     }
