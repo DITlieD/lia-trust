@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-19T12:54:22.280060+00:00",
+  "generated_at": "2026-07-19T23:09:14.491732+00:00",
   "harbor_version": "0.18.0",
   "model": "swe-1-6",
   "bridge": "http://127.0.0.1:8810",
@@ -19,7 +19,15 @@
       "off_tokens": 13212304,
       "on_tokens": 32385312
     },
-    "does_lia_hurt_task_success_claw": null,
+    "does_lia_hurt_task_success_claw": {
+      "off": 0.075,
+      "on": 0.075,
+      "delta": 0.0,
+      "off_n": 80,
+      "on_n": 80,
+      "off_tokens": 229695834,
+      "on_tokens": 398637576
+    },
     "trust_catch_arm_c": 0.9722222222222222,
     "trust_false_block_arm_c": 0.0,
     "trust_overhead_arm_a_wall_mean_s": 1.7232,
@@ -244,7 +252,7 @@
       }
     },
     "claw-swe-lite": {
-      "status": "OFF_DONE",
+      "status": "MEASURED",
       "n_tasks": 80,
       "off": {
         "job": "bench/harbor/runs/claw-off/2026-07-19__07-42-36",
@@ -374,8 +382,141 @@
         "n_input_tokens": 228076101,
         "n_output_tokens": 1619733
       },
-      "on": null,
-      "delta": null
+      "on": {
+        "job": "bench/harbor/runs/claw-on/2026-07-19__21-54-22",
+        "status": "MEASURED",
+        "finished_at": "2026-07-20T08:09:14.047833",
+        "n_total": 80,
+        "stats": {
+          "n_completed_trials": 80,
+          "n_errored_trials": 1,
+          "n_running_trials": 0,
+          "n_pending_trials": 0,
+          "n_cancelled_trials": 0,
+          "n_retries": 0,
+          "evals": {
+            "terminus-lia__swe-1-6__claw-swe-lite-harbor": {
+              "n_trials": 80,
+              "n_errors": 1,
+              "metrics": [
+                {
+                  "mean": 0.075
+                }
+              ],
+              "pass_at_k": {},
+              "reward_stats": {
+                "reward": {
+                  "0.0": [
+                    "vuejs__core-11589__K6gVZjD",
+                    "django__django-12406__B4aTp2m",
+                    "django__django-11790__JBcSP4P",
+                    "gin-gonic__gin-1957__oAnE348",
+                    "tokio-rs__tokio-6724__WtCTCHR",
+                    "sphinx-doc__sphinx-8056__kvJazVi",
+                    "projectlombok__lombok-2792__2b4zvwo",
+                    "briannesbitt__carbon-3073__KfBpyaw",
+                    "nushell__nushell-12950__LYyqs75",
+                    "rubocop__rubocop-13396__ZmYk3Cf",
+                    "valkey-io__valkey-1842__xtkLrK6",
+                    "redis__redis-9733__rYjfvDF",
+                    "php-cs-fixer__php-cs-fixer-7663__tk2U72P",
+                    "fluent__fluentd-4030__UExq6UL",
+                    "jordansissel__fpm-1850__PjrAiZW",
+                    "uutils__coreutils-6377__pFLzGMp",
+                    "fmtlib__fmt-3248__tzegHtC",
+                    "sharkdp__bat-1892__uMYjWaJ",
+                    "sharkdp__bat-2201__3EMyLmB",
+                    "apache__druid-16875__5KiFyHH",
+                    "redis__redis-10095__U9ydLSV",
+                    "redis__redis-13338__vAFgAUz",
+                    "nushell__nushell-13246__svj5VLm",
+                    "redis__redis-12272__HWVq3VK",
+                    "fluent__fluentd-3631__qGR7gsv",
+                    "rubocop__rubocop-13560__pBXAUGt",
+                    "briannesbitt__carbon-2813__TYybP8M",
+                    "caddyserver__caddy-6115__6CDwx5B",
+                    "caddyserver__caddy-5995__SUbBA3S",
+                    "preactjs__preact-3689__raGsjcs",
+                    "php-cs-fixer__php-cs-fixer-7998__wjDfZwk",
+                    "faker-ruby__faker-2705__LCBHJNR",
+                    "axios__axios-5316__sq8Ea9C",
+                    "projectlombok__lombok-3215__yKeAPJh",
+                    "django__django-11885__CcrKb2a",
+                    "briannesbitt__carbon-3103__BaMVZdz",
+                    "preactjs__preact-3062__UvNFxZP",
+                    "fmtlib__fmt-2310__pY92FFk",
+                    "preactjs__preact-4182__rimCqsY",
+                    "hashicorp__terraform-35611__nLkcsRs",
+                    "burntsushi__ripgrep-2576__thJxSTm",
+                    "gin-gonic__gin-1805__nGKGXGC",
+                    "reactivex__rxjava-7597__jyaLstW",
+                    "hashicorp__terraform-34900__TTgbwHR",
+                    "php-cs-fixer__php-cs-fixer-8331__ETWdxkE",
+                    "google__gson-1100__2vkGuS2",
+                    "uutils__coreutils-6575__jSsUnnb",
+                    "fluent__fluentd-3608__B4oJaKW",
+                    "rubocop__rubocop-13680__y5N7jov",
+                    "gohugoio__hugo-12562__Ls2ewzM",
+                    "gin-gonic__gin-3820__CgTmk7G",
+                    "jekyll__jekyll-8047__3DpWUfo",
+                    "laravel__framework-52866__MYgy4oQ",
+                    "phpoffice__phpspreadsheet-3940__kYm7yLT",
+                    "micropython__micropython-13569__kUmrJue",
+                    "preactjs__preact-2757__vG6ECty",
+                    "laravel__framework-51195__pbyVhZy",
+                    "apache__druid-14136__rduRxiE",
+                    "jqlang__jq-2598__33BCvQh",
+                    "prometheus__prometheus-13845__JFeh3zb",
+                    "tokio-rs__axum-682__L2jwkhV",
+                    "tokio-rs__axum-691__cfZeGfm",
+                    "facebook__docusaurus-10130__wTTzXF6",
+                    "projectlombok__lombok-3042__f4E7UGt",
+                    "preactjs__preact-4316__vAFQ3Kt",
+                    "fastlane__fastlane-21857__8y9ifH2",
+                    "gohugoio__hugo-12579__CysUpT6",
+                    "projectlombok__lombok-3009__XLBiCRc",
+                    "mrdoob__three.js-25687__vqk95TM",
+                    "apache__lucene-13170__ofW5URz",
+                    "preactjs__preact-4245__f5sfoTt",
+                    "google__gson-2024__HBZcVm7",
+                    "fmtlib__fmt-3272__ZrU9moz",
+                    "briannesbitt__carbon-2752__iMHBNd7"
+                  ],
+                  "1.0": [
+                    "django__django-11999__NaXKCfF",
+                    "sphinx-doc__sphinx-8035__Rcqn6B6",
+                    "sphinx-doc__sphinx-8551__TWtQrrY",
+                    "django__django-12708__U4y2jGP",
+                    "sphinx-doc__sphinx-9320__K2Thh4r",
+                    "django__django-12143__gyJsh2x"
+                  ]
+                }
+              },
+              "exception_stats": {
+                "AgentTimeoutError": [
+                  "jqlang__jq-2598__33BCvQh"
+                ]
+              }
+            }
+          },
+          "n_input_tokens": 397222965,
+          "n_cache_tokens": 0,
+          "n_output_tokens": 1414611,
+          "cost_usd": null
+        },
+        "mean_reward": 0.075,
+        "n_input_tokens": 397222965,
+        "n_output_tokens": 1414611
+      },
+      "delta": {
+        "off": 0.075,
+        "on": 0.075,
+        "delta": 0.0,
+        "off_n": 80,
+        "on_n": 80,
+        "off_tokens": 229695834,
+        "on_tokens": 398637576
+      }
     }
   }
 }
