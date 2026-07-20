@@ -43,13 +43,21 @@
   },
   "mcp": {
     "jsonrpc": "2.0",
+    "transport": "stdio_content_length",
+    "framing": "Content-Length header + CRLF blank line + body",
+    "protocol_version": "2024-11-05",
+    "lifecycle": ["initialize", "notifications/initialized", "tools/list", "tools/call"],
     "methods": {
+      "initialize": "initialize",
+      "initialized_notification": "notifications/initialized",
       "list": "tools/list",
-      "call": "tools/call"
+      "call": "tools/call",
+      "ping": "ping"
     },
     "call_params": ["name", "arguments"],
     "result_content_type_text": "text",
-    "result_is_error": "isError"
+    "result_is_error": "isError",
+    "server_info_name": "lia-trust"
   },
   "codex_mcp_tools": {
     "session": "codex",

@@ -7,6 +7,7 @@ mod dispatch;
 mod generic;
 mod install;
 mod mcp_inspection;
+mod mcp_stdio;
 
 pub use assurance::{
     known_adapters, load_assurance_from_probe_file, report_for_adapter, AssuranceLevel,
@@ -22,7 +23,11 @@ pub use contracts::{
     ALL_CAPABILITY_KEYS, CONTRACTS_JSON, MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
     MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
 };
-pub use codex::{handle_jsonrpc, proxy_tool_call, proxy_tool_names, JsonRpcRequest, ProxyCallResult};
+pub use codex::{
+    handle_jsonrpc, handle_jsonrpc_opt, proxy_tool_call, proxy_tool_names, serve_mcp_stdio,
+    serve_mcp_stdio_io, JsonRpcRequest, ProxyCallResult, MCP_PROTOCOL_VERSION, MCP_SERVER_NAME,
+};
+pub use mcp_stdio::{frame_json, read_framed_message, write_framed_message};
 pub use dispatch::{
     denial_summary, dispatch_action, is_blocking, worst_verdict, DispatchResult, RunContext,
 };

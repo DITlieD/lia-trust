@@ -361,25 +361,23 @@ exec "{bin}" hook --adapter claude-code \
 }
 
 /// Build shell wrapper for Codex MCP stdio proxy.
+///
+/// Codex speaks **Content-Length framed** JSON-RPC on stdio and requires
+/// `initialize` before tools/*. This wrapper execs `lia mcp` in long-lived
+/// stdio mode (no `--request`); failures propagate (no `|| true`).
 pub fn codex_wrapper_script(paths: &InstallPaths) -> String {
     format!(
         r#"#!/usr/bin/env bash
 # {marker}
 set -euo pipefail
 SECRET="$(tr -d '[:space:]' < "{secret}")"
-# MCP often speaks newline-delimited JSON-RPC; `lia mcp` reads one request from stdin
-# (or --request). For multi-request sessions, loop.
-while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ -z "$line" ]] && continue
-  "{bin}" mcp \
-    --config "{config}" \
-    --journal "{journal}" \
-    --secret-key-hex "$SECRET" \
-    --key-id lia-install \
-    --probe "{probe}" \
-    --adapter codex \
-    --request "$line" || true
-done
+exec "{bin}" mcp \
+  --config "{config}" \
+  --journal "{journal}" \
+  --secret-key-hex "$SECRET" \
+  --key-id lia-install \
+  --probe "{probe}" \
+  --adapter codex
 "#,
         marker = LIA_HOOK_MARKER,
         secret = paths.secret_key_file.display(),

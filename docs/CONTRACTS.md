@@ -54,11 +54,14 @@ Sources (external docs): [Claude Code hooks](https://code.claude.com/docs/en/hoo
 | Config file | `config.toml` under codex home |
 | MCP table | `[mcp_servers.<name>]` |
 | LIA server name | `lia-trust` |
-| Transport | stdio (`command` + `args`) |
+| Transport | stdio with **Content-Length** framing (not NDJSON) |
+| Protocol version | `2024-11-05` |
+| Lifecycle | `initialize` → `notifications/initialized` → `tools/list` / `tools/call` |
 | JSON-RPC | `2.0` |
-| Methods | `tools/list`, `tools/call` |
+| Methods | `initialize`, `ping`, `tools/list`, `tools/call` |
 | Call params | `name`, `arguments` |
 | Result error flag | `isError` |
+| Server info name | `lia-trust` |
 
 Proxy tools gated by LIA: `write_file`, `delete_file`, `shell`, `run_test`,
 `complete_task`, `add_dependency`. Inspection tools are read-only:

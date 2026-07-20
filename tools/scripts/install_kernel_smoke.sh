@@ -67,17 +67,111 @@ python3 -c 'import json,sys; print(json.dumps({"session_id":"smoke","cwd":sys.ar
   | "$HOOK" >"$WORK/oos.out" || test $? -eq 2
 python3 -c 'import json; d=json.load(open("'"$WORK"'/oos.out")); assert d["hookSpecificOutput"]["permissionDecision"]=="deny"'
 
-echo "== Codex MCP HARD =="
-REQ1='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"run_test","arguments":{"claimed_pass":true}}}'
-REQ2='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"delete_file","arguments":{"path":"/tmp/outside-lia-install-smoke-del"}}}'
-"$LIA" mcp --config "$CFG" --journal "$DB" --secret-key-hex "$SECRET" --key-id smoke --adapter codex --request "$REQ1" >"$WORK/c1.out" || test $? -eq 2
-"$LIA" mcp --config "$CFG" --journal "$DB" --secret-key-hex "$SECRET" --key-id smoke --adapter codex --request "$REQ2" >"$WORK/c2.out" || test $? -eq 2
-python3 - <<PY
-import json
-for p in ["$WORK/c1.out","$WORK/c2.out"]:
-  d=json.load(open(p))
-  assert d["result"]["isError"] is True
-print("codex deny ok")
+echo "== Codex installed wrapper: Content-Length initialize → list → HARD deny =="
+# Real Codex client path: long-lived stdio MCP with Content-Length framing.
+# Drive the installed codex-mcp.sh (not bare --request one-shot).
+MCP_WRAP="$LIA_HOME/bin/codex-mcp.sh"
+test -x "$MCP_WRAP"
+python3 - "$MCP_WRAP" "$WORK" <<'PY'
+import json, os, subprocess, sys
+
+wrap, work = sys.argv[1], sys.argv[2]
+
+def frame(obj: dict) -> bytes:
+    body = json.dumps(obj, separators=(",", ":")).encode()
+    return f"Content-Length: {len(body)}\r\n\r\n".encode() + body
+
+def read_frame(stdout) -> dict:
+    headers = {}
+    while True:
+        line = stdout.readline()
+        if not line:
+            raise RuntimeError("EOF before MCP headers")
+        if line in (b"\r\n", b"\n"):
+            break
+        if b":" in line:
+            k, v = line.decode().split(":", 1)
+            headers[k.strip().lower()] = v.strip()
+    n = int(headers["content-length"])
+    body = stdout.read(n)
+    if len(body) != n:
+        raise RuntimeError(f"short body want={n} got={len(body)}")
+    return json.loads(body)
+
+proc = subprocess.Popen(
+    [wrap],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+assert proc.stdin and proc.stdout
+
+# 1) initialize
+proc.stdin.write(frame({
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "lia-install-smoke", "version": "0"},
+    },
+}))
+proc.stdin.flush()
+init = read_frame(proc.stdout)
+assert init.get("error") is None, init
+assert init["result"]["serverInfo"]["name"] == "lia-trust", init
+assert init["result"]["protocolVersion"] == "2024-11-05", init
+
+# 2) notifications/initialized (no response)
+proc.stdin.write(frame({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+proc.stdin.flush()
+
+# 3) tools/list
+proc.stdin.write(frame({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}))
+proc.stdin.flush()
+listed = read_frame(proc.stdout)
+tools = [t["name"] for t in listed["result"]["tools"]]
+assert "delete_file" in tools and "run_test" in tools, tools
+
+# 4) HARD fabricated pass
+proc.stdin.write(frame({
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {"name": "run_test", "arguments": {"claimed_pass": True}},
+}))
+proc.stdin.flush()
+fab = read_frame(proc.stdout)
+assert fab["result"]["isError"] is True, fab
+assert fab["result"]["lia"]["allowed"] is False, fab
+
+# 5) HARD OOS delete
+proc.stdin.write(frame({
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+        "name": "delete_file",
+        "arguments": {"path": "/tmp/outside-lia-install-smoke-del"},
+    },
+}))
+proc.stdin.flush()
+oos = read_frame(proc.stdout)
+assert oos["result"]["isError"] is True, oos
+assert oos["result"]["lia"]["allowed"] is False, oos
+
+proc.stdin.close()
+try:
+    proc.wait(timeout=5)
+except subprocess.TimeoutExpired:
+    proc.kill()
+    proc.wait(timeout=2)
+
+open(os.path.join(work, "codex-framed-session.json"), "w").write(
+    json.dumps({"initialize": init, "tools": tools, "fab": fab, "oos": oos}, indent=2)
+)
+print("codex framed initialize→list→HARD deny OK via installed wrapper")
 PY
 
 "$LIA" journal-verify "$DB"

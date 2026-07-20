@@ -7,9 +7,9 @@ use clap::{Parser, Subcommand};
 use lia_adapters::{
     assert_adapter, default_claude_home, default_codex_home, default_lia_home, evaluate_generic_action,
     evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin, install as install_kernel,
-    known_adapters, looks_like_live_user_home, report_for_adapter, status as install_status,
-    uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction, InspectionContext,
-    InstallRequest, RunContext, WrapOptions,
+    known_adapters, looks_like_live_user_home, report_for_adapter, serve_mcp_stdio,
+    status as install_status, uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction,
+    InspectionContext, InstallRequest, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
@@ -1255,14 +1255,13 @@ fn run_mcp(
         adapter,
         last_denials: Vec::<DenialRecord>::new(),
     };
-    let raw = match request {
-        Some(s) => s,
-        None => {
-            let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf)?;
-            buf
-        }
-    };
+    // Long-lived Content-Length framed MCP session (Codex real client path).
+    // One-shot `--request` kept for unit/conformance callers.
+    if request.is_none() {
+        serve_mcp_stdio(&run_ctx, &inspect_ctx).map_err(|e| e.to_string())?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    let raw = request.expect("checked is_some");
     let response = handle_jsonrpc(&raw, &run_ctx, &inspect_ctx)?;
     println!("{}", serde_json::to_string(&response)?);
     if response.get("error").is_some() {

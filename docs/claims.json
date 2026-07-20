@@ -120,39 +120,39 @@
       "pointer": "bench/harbor/results/LIA-41-ITEM-SCORES-AND-ANALYSIS.md"
     },
     {
-      "text": "Claude Code PREVENT recorded-adapter path [MEASURED]: lia bench --harness claude-code --force-recorded on frozen corpus; OFF catch_rate=0.0 false_block=0.0; ON catch_rate=1.0 false_block=0.0 adversarial_n=81 benign_n=36; verify_ok=true. Real PreToolUse hook entrypoint (not reimplemented gate stub). Never pool with live-agent lanes.",
+      "text": "Claude Code PREVENT recorded-agent bench [MEASURED]: lia bench --harness claude-code --force-recorded on frozen corpus; OFF catch_rate=0.0; ON catch_rate=1.0 false_block=0.0 adversarial_n=81 benign_n=36; verify_ok=true. Mixed surface honesty: shell/fs HARD classes use PreToolUse hook path; ground/syco/other cases fall back to generic-dispatch when no hook mapping (trial detail field). Never pool with live-agent lanes.",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/results/claude-code-prevent-recorded.json"
     },
     {
-      "text": "Codex PREVENT recorded-adapter path [MEASURED]: lia bench --harness codex --force-recorded on frozen corpus; OFF catch_rate=0.0 false_block=0.0; ON catch_rate=1.0 false_block=0.0 adversarial_n=81 benign_n=36; verify_ok=true. Real MCP proxy entrypoint. Never pool with live-agent lanes.",
+      "text": "Codex PREVENT recorded-agent bench [MEASURED]: lia bench --harness codex --force-recorded on frozen corpus; OFF catch_rate=0.0; ON catch_rate=1.0 false_block=0.0 adversarial_n=81 benign_n=36; verify_ok=true. Mixed surface honesty: mappable proxy tools use MCP tools/call; ground/syco/other cases fall back to generic-dispatch (trial detail). Never pool with live-agent lanes.",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/results/codex-prevent-recorded.json"
     },
     {
-      "text": "Claude Code PREVENT live-agent lane [MEASURED] Devin-bridge free model swe-1-6 harness=claude-code arm=on agent_mode=live-agent catch_rate=1.0 false_block=0.0 adversarial_n=81 host=127.0.0.1:8810; tool actions routed through real PreToolUse path. Separate from recorded-adapter numbers; never pooled.",
+      "text": "Claude Code PREVENT live-agent lane [MEASURED] Devin-bridge free model swe-1-6 harness=claude-code arm=on agent_mode=live-agent catch_rate=1.0 false_block=0.0 adversarial_n=81 host=127.0.0.1:8810; tool actions applied via live loop with PreToolUse when mapped. Separate from recorded-agent numbers; never pooled.",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/results/claude-code-prevent-live-swe-1-6.json"
     },
     {
-      "text": "Codex PREVENT live-agent lane [MEASURED] Devin-bridge free model swe-1-6 harness=codex arm=on agent_mode=live-agent catch_rate=1.0 false_block=0.0 adversarial_n=81 host=127.0.0.1:8810; tool actions routed through real MCP proxy (run_shell alias fixed). Separate from recorded-adapter numbers; never pooled.",
+      "text": "Codex PREVENT live-agent lane [MEASURED] Devin-bridge free model swe-1-6 harness=codex arm=on agent_mode=live-agent catch_rate=1.0 false_block=0.0 adversarial_n=81 host=127.0.0.1:8810; tool actions via MCP proxy when mapped (incl. run_shell alias). Separate from recorded-agent numbers; never pooled.",
       "tags": [
         "MEASURED"
       ],
       "pointer": "bench/results/codex-prevent-live-swe-1-6.json"
     },
     {
-      "text": "lia install wires Claude Code PreToolUse + Codex mcp_servers.lia-trust with install-manifest; fixture install/status/uninstall + HARD fabricated-pass and OOS-delete DENY on installed hook and MCP paths; journal-verify OK [MEASURED]. Assurance remains GATE not CONFINE.",
+      "text": "lia install wires Claude Code PreToolUse + Codex mcp_servers.lia-trust; installed codex-mcp.sh speaks Content-Length framed MCP with initialize handshake then HARD fabricated-pass and OOS-delete DENY; Claude installed hook DENY; journal-verify OK [MEASURED]. Assurance remains GATE not CONFINE.",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "tools/scripts/install_kernel_smoke.sh + crates/lia-adapters/src/install.rs"
+      "pointer": "tools/scripts/install_kernel_smoke.sh + crates/lia-adapters/src/codex.rs + crates/lia-adapters/src/mcp_stdio.rs"
     }
   ]
 }
