@@ -107,28 +107,39 @@ fn path_inside_any(path: &Path, roots: &[PathBuf]) -> bool {
     false
 }
 
+/// Protect LIA / harness policy surfaces — not ordinary project paths like
+/// git `hooks/post-receive` under a task workspace (those are in-scope work).
 fn is_protected(path: &str, protected: &[PathBuf]) -> bool {
     let p = normalize_lexical(Path::new(path));
+    let ps = p.to_string_lossy();
+
+    // Explicit configured protected paths (prefix match).
     for prot in protected {
         let n = normalize_lexical(prot);
         if p == n || p.starts_with(&n) {
             return true;
         }
-        let ps = p.to_string_lossy();
-        let ns = n.to_string_lossy();
-        if ps.contains("/hooks/")
-            || ps.contains("/policy/")
-            || ps.ends_with("verifier")
-            || ps.contains("gate-manifest")
-            || ns.contains("hooks") && ps.contains(ns.as_ref())
-        {
-            return true;
-        }
     }
-    let ps = p.to_string_lossy();
-    ps.contains("/.lia/")
+
+    // LIA / agent-harness control plane only (not generic ".../hooks/...").
+    if ps.contains("/.lia/")
         || ps.ends_with("policy.frozen.yaml")
-        || ps.contains("/hooks/")
+        || ps.contains("gate-manifest")
+        || ps.contains("/.claude/hooks/")
+        || ps.contains("/.codex/hooks/")
+        || ps.contains("/.cursor/hooks/")
+        || ps.contains("/lia/policy/")
+        || ps.contains("/lia/hooks/")
+    {
+        return true;
+    }
+
+    // "verifier" binary / module at path end under control dirs
+    if (ps.contains("/.lia/") || ps.contains("/policy/")) && ps.ends_with("verifier") {
+        return true;
+    }
+
+    false
 }
 
 fn resolve_existing_symlink_target(path: &str) -> Option<PathBuf> {
@@ -139,5 +150,76 @@ fn resolve_existing_symlink_target(path: &str) -> Option<PathBuf> {
         Some(normalize_lexical(&parent.join(target)))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{GateConfig, GatePayload, GateRequest};
+    use std::collections::BTreeMap;
+    use uuid::Uuid;
+
+    fn cfg(roots: &[&str]) -> GateConfig {
+        GateConfig {
+            allowed_roots: roots.iter().map(PathBuf::from).collect(),
+            home_dir: Some(PathBuf::from("/home/agent")),
+            cwd: PathBuf::from(roots[0]),
+            protected_paths: vec![PathBuf::from(format!("{}/.lia", roots[0]))],
+            registry: BTreeMap::new(),
+            env: BTreeMap::new(),
+            run_id: None,
+        }
+    }
+
+    fn eval_path(path: &str, config: &GateConfig) -> crate::GateOutcome {
+        let req = GateRequest {
+            gate_id: "filesystem-scope".into(),
+            action_id: Uuid::new_v4(),
+            kind: None,
+            payload: GatePayload {
+                path: Some(path.into()),
+                ..GatePayload::default()
+            },
+        };
+        check_filesystem_scope(&req, config).expect("eval")
+    }
+
+    #[test]
+    fn git_hooks_under_workspace_allow() {
+        use lia_protocol::Verdict;
+        let config = cfg(&["/app", "/git", "/testbed"]);
+        for p in [
+            "/app/git/server/hooks/post-receive",
+            "/git/server/hooks/post-receive",
+            "/testbed/hooks/post-receive",
+        ] {
+            let out = eval_path(p, &config);
+            assert!(
+                matches!(out.verdict, Verdict::Allow),
+                "expected ALLOW for git hook path {p}, got {:?} {}",
+                out.verdict,
+                out.reason_code
+            );
+        }
+    }
+
+    #[test]
+    fn lia_control_plane_hooks_deny() {
+        use lia_protocol::Verdict;
+        let config = cfg(&["/app"]);
+        for p in [
+            "/app/.lia/policy.yaml",
+            "/app/.claude/hooks/PreToolUse.sh",
+            "/app/.lia/hooks/block.sh",
+        ] {
+            let out = eval_path(p, &config);
+            assert!(
+                matches!(out.verdict, Verdict::Deny),
+                "expected DENY for control plane {p}, got {:?} {}",
+                out.verdict,
+                out.reason_code
+            );
+        }
     }
 }

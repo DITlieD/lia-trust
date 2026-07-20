@@ -1,0 +1,13 @@
+{
+  "job": "bench/harbor/runs/tb2-on-post-fix2/2026-07-20__10-02-30",
+  "status": "SMOKE",
+  "finished_at": "2026-07-20T10:04:04.514281",
+  "n_total": 1,
+  "mean_reward": 1.0,
+  "deny_by_reason": {},
+  "deny_markers": 0,
+  "n_trajectories": 1,
+  "SHELL_OUT_OF_SCOPE": 0,
+  "SHELL_DESTRUCTIVE": 0,
+  "note": "1-task TB2 ON smoke after P0 roots+hooks fix; companion livability not full 24-task MEASURED"
+}

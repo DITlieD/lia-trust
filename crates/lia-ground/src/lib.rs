@@ -611,6 +611,11 @@ fn resolve_path(ctx: &GroundContext, rel: &str) -> PathBuf {
 }
 
 fn symbol_present(body: &str, symbol: &str) -> bool {
+    // Prefer declaration-shaped matches (AST-lite / word-boundary) over bare
+    // substring hits so false symbol misses drop on fixture languages (P2-16).
+    if symbol_declaration_present(body, symbol) {
+        return true;
+    }
     let patterns = [
         format!("fn {symbol}"),
         format!("fn {symbol}<"),
@@ -632,6 +637,39 @@ fn symbol_present(body: &str, symbol: &str) -> bool {
             let t = line.trim();
             t == symbol || t.starts_with(&format!("{symbol}(")) || t.starts_with(&format!("{symbol} ="))
         })
+}
+
+/// Declaration-shaped patterns for Rust/Python/JS (not full AST; reduces
+/// token-only false positives like matching `foo` inside `foobar`).
+fn symbol_declaration_present(body: &str, symbol: &str) -> bool {
+    let esc = regex_escape(symbol);
+    let decls = [
+        format!(r"(?m)^\s*(pub\s+)?(async\s+)?fn\s+{esc}\s*[<(]"),
+        format!(r"(?m)^\s*(pub\s+)?(struct|enum|type|const|trait|mod)\s+{esc}\b"),
+        format!(r"(?m)^\s*(async\s+)?def\s+{esc}\s*\("),
+        format!(r"(?m)^\s*class\s+{esc}\b"),
+        format!(r"(?m)^\s*(export\s+)?(async\s+)?function\s+{esc}\s*\("),
+        format!(r"(?m)^\s*(export\s+)?(const|let|var)\s+{esc}\s*="),
+    ];
+    decls.iter().any(|pat| {
+        regex::Regex::new(pat)
+            .map(|re| re.is_match(body))
+            .unwrap_or(false)
+    })
+}
+
+fn regex_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '.' | '+' | '*' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '^' | '$' | '\\' => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn hl4_complete(w: &WrapperObservation) -> bool {

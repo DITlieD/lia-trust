@@ -23,6 +23,26 @@ while IFS= read -r -d '' expected; do
   exp_reason="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["reason_code"])' "$expected")"
   exp_exit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["exit_code"])' "$expected")"
 
+  if [[ ! -f "$dir/request.json" && -f "$dir/graph.json" ]]; then
+    WORK="$(mktemp -d "${TMPDIR:-/tmp}/lia-gf-XXXXXX")"
+    OUT="$WORK/out.json"
+    set +e
+    "$LIA" taint --graph-file "$dir/graph.json" >"$OUT" 2>"$WORK/err"
+    EC=$?
+    set -e
+    got_verdict="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verdict"])' "$OUT")"
+    got_reason="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["reason_code"])' "$OUT")"
+    if [[ "$got_verdict" == "$exp_verdict" && "$got_reason" == "$exp_reason" && "$EC" -eq "$exp_exit" ]]; then
+      echo "OK $name verdict=$got_verdict reason=$got_reason exit=$EC (taint cli)"
+    else
+      fail=$((fail + 1))
+      echo "FAIL $name got verdict=$got_verdict reason=$got_reason exit=$EC expected verdict=$exp_verdict reason=$exp_reason exit=$exp_exit" >&2
+      cat "$WORK/err" >&2 || true
+    fi
+    rm -rf "$WORK"
+    continue
+  fi
+
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/lia-gf-XXXXXX")"
   DB="$WORK/journal.db"
   OUT="$WORK/out.json"

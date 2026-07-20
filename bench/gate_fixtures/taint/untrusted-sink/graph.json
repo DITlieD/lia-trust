@@ -1,0 +1,26 @@
+{
+  "nodes": [
+    {
+      "id": "src",
+      "kind": "untrusted_source"
+    },
+    {
+      "id": "mid",
+      "kind": "intermediate"
+    },
+    {
+      "id": "sink",
+      "kind": "destructive_sink"
+    }
+  ],
+  "edges": [
+    {
+      "from": "src",
+      "to": "mid"
+    },
+    {
+      "from": "mid",
+      "to": "sink"
+    }
+  ]
+}

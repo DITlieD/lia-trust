@@ -22,6 +22,7 @@ pub enum CaseClass {
     UnsupportedAgreement,
     SecretLeak,
     JournalTamper,
+    DestructiveShell,
     Benign,
 }
 

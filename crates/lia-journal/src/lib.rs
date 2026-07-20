@@ -10,9 +10,47 @@ use lia_protocol::{
     GATE_MANIFEST_VERSION,
 };
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
 use uuid::Uuid;
+
+/// Head/tail anchors for shareable truncated journals (P2-4).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnchorRow {
+    pub seq: u64,
+    pub row_hash: String,
+    pub prev_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ShareableAnchors {
+    pub total_rows: u64,
+    pub head: Vec<AnchorRow>,
+    pub tail: Vec<AnchorRow>,
+    pub head_chain_ok: bool,
+    pub tail_chain_ok: bool,
+    pub truncated_middle: bool,
+}
+
+fn anchors_chain_ok(rows: &[AnchorRow]) -> bool {
+    if rows.is_empty() {
+        return true;
+    }
+    let mut prev = rows[0].prev_hash.as_str();
+    let mut expect_seq = rows[0].seq;
+    for (i, r) in rows.iter().enumerate() {
+        if r.seq != expect_seq {
+            return false;
+        }
+        if i > 0 && r.prev_hash != prev {
+            return false;
+        }
+        prev = r.row_hash.as_str();
+        expect_seq = r.seq + 1;
+    }
+    true
+}
 
 pub const GENESIS_PREV_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
@@ -333,6 +371,44 @@ impl Journal {
             .map_err(|_| JournalError::Integrity("journal lock poisoned".into()))?;
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM journal_rows", [], |r| r.get(0))?;
         Ok(n as u64)
+    }
+
+    /// Shareable truncation policy (P2-4): keep head+tail anchors with hashes.
+    /// Full chain verify still applies to retained contiguous segments when
+    /// exported as separate mini-journals; this returns an anchor receipt that
+    /// offline tools can check without the middle rows.
+    pub fn shareable_anchors(&self, head: usize, tail: usize) -> Result<ShareableAnchors, JournalError> {
+        let rows = self.load_rows()?;
+        let n = rows.len();
+        let head_n = head.min(n);
+        let tail_n = tail.min(n.saturating_sub(head_n));
+        let head_rows: Vec<AnchorRow> = rows[..head_n]
+            .iter()
+            .map(|r| AnchorRow {
+                seq: r.seq,
+                row_hash: r.row_hash.clone(),
+                prev_hash: r.prev_hash.clone(),
+            })
+            .collect();
+        let tail_start = n.saturating_sub(tail_n);
+        let tail_rows: Vec<AnchorRow> = rows[tail_start..]
+            .iter()
+            .map(|r| AnchorRow {
+                seq: r.seq,
+                row_hash: r.row_hash.clone(),
+                prev_hash: r.prev_hash.clone(),
+            })
+            .collect();
+        let head_ok = anchors_chain_ok(&head_rows);
+        let tail_ok = anchors_chain_ok(&tail_rows);
+        Ok(ShareableAnchors {
+            total_rows: n as u64,
+            head: head_rows,
+            tail: tail_rows,
+            head_chain_ok: head_ok,
+            tail_chain_ok: tail_ok,
+            truncated_middle: n > head_n + tail_n,
+        })
     }
 
     pub fn load_rows(&self) -> Result<Vec<JournalRow>, JournalError> {

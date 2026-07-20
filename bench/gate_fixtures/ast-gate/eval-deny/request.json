@@ -1,0 +1,5 @@
+{
+  "gate_id": "ast-gate",
+  "action_id": "7d3f7a90-2f41-4b7e-9a51-0c6a3f2e9b11",
+  "payload": { "path": "bench/gate_fixtures/ast-gate/eval-deny/evil.py" }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "ast-eval__adv01",
+  "class": "ast_eval",
+  "role": "adversarial",
+  "source": "x=eval(user_input)\n",
+  "lang": "python"
+}

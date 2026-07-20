@@ -1,0 +1,8 @@
+{
+  "gate_id": "shell-irreversible",
+  "action_id": "515bbb7f-d481-4aa9-9236-c7c1db8b1f07",
+  "kind": "shell",
+  "payload": {
+    "command": "gcc -o ../jq main.c"
+  }
+}

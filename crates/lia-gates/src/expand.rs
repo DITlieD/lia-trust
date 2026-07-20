@@ -84,19 +84,168 @@ pub fn expand_path_token(
     })
 }
 
+/// Refuse real shell command substitution while allowing backticks / `$` that appear
+/// only as data inside single quotes or single-quoted heredoc bodies (e.g. Go struct tags).
+///
+/// Rules (bash-aligned for the cases we care about):
+/// - Inside single quotes: no substitution → ALLOW backticks and `$(...)` text.
+/// - Unquoted or double-quoted: `$()` and backticks are substitution → DENY.
+/// - Heredoc with `<<'DELIM'` / `<<"DELIM"`: body is not scanned for substitution.
+/// - Heredoc with unquoted `<<DELIM`: body is scanned (unquoted heredoc expands).
 pub fn reject_command_substitution(s: &str) -> Result<(), ExpandError> {
-    if s.contains("$(") || s.contains('`') {
-        return Err(ExpandError::CommandSubstitution(s.to_string()));
-    }
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i + 1 < bytes.len() {
-        if bytes[i] == b'$' && bytes[i + 1] == b'(' {
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0usize;
+    let mut in_single = false;
+    let mut in_double = false;
+
+    while i < chars.len() {
+        let c = chars[i];
+
+        // Heredoc start only when not inside quotes.
+        if !in_single && !in_double && c == '<' && i + 1 < chars.len() && chars[i + 1] == '<' {
+            i += 2;
+            // optional <<-
+            if i < chars.len() && chars[i] == '-' {
+                i += 1;
+            }
+            // skip whitespace
+            while i < chars.len() && (chars[i] == ' ' || chars[i] == '\t') {
+                i += 1;
+            }
+            let mut quoted = false;
+            let mut delim = String::new();
+            if i < chars.len() && (chars[i] == '\'' || chars[i] == '"') {
+                quoted = true;
+                let q = chars[i];
+                i += 1;
+                while i < chars.len() && chars[i] != q {
+                    delim.push(chars[i]);
+                    i += 1;
+                }
+                if i < chars.len() && chars[i] == q {
+                    i += 1;
+                }
+            } else {
+                while i < chars.len()
+                    && !chars[i].is_whitespace()
+                    && chars[i] != ';'
+                    && chars[i] != '|'
+                    && chars[i] != '&'
+                {
+                    delim.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if delim.is_empty() {
+                continue;
+            }
+            // consume rest of opener line
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == '\n' {
+                i += 1;
+            }
+            // body until a line that is exactly delim
+            let delim_chars: Vec<char> = delim.chars().collect();
+            while i < chars.len() {
+                let line_start = i;
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+                let line = &chars[line_start..i];
+                // strip trailing CR
+                let line = if line.last() == Some(&'\r') {
+                    &line[..line.len().saturating_sub(1)]
+                } else {
+                    line
+                };
+                let is_end = line == delim_chars.as_slice();
+                if is_end {
+                    if i < chars.len() && chars[i] == '\n' {
+                        i += 1;
+                    }
+                    break;
+                }
+                // unquoted heredoc bodies expand; scan for substitution
+                if !quoted {
+                    let body: String = line.iter().collect();
+                    if has_active_substitution(&body) {
+                        return Err(ExpandError::CommandSubstitution(s.to_string()));
+                    }
+                }
+                if i < chars.len() && chars[i] == '\n' {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+
+        if !in_double && c == '\'' {
+            in_single = !in_single;
+            i += 1;
+            continue;
+        }
+        if !in_single && c == '"' {
+            in_double = !in_double;
+            i += 1;
+            continue;
+        }
+        if in_single {
+            i += 1;
+            continue;
+        }
+        // escapes outside single quotes
+        if c == '\\' && i + 1 < chars.len() {
+            i += 2;
+            continue;
+        }
+        if c == '$' && i + 1 < chars.len() && chars[i + 1] == '(' {
+            return Err(ExpandError::CommandSubstitution(s.to_string()));
+        }
+        if c == '`' {
             return Err(ExpandError::CommandSubstitution(s.to_string()));
         }
         i += 1;
     }
     Ok(())
+}
+
+fn has_active_substitution(s: &str) -> bool {
+    // body line already outside single quotes context of outer parse
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if !in_double && c == '\'' {
+            in_single = !in_single;
+            i += 1;
+            continue;
+        }
+        if !in_single && c == '"' {
+            in_double = !in_double;
+            i += 1;
+            continue;
+        }
+        if in_single {
+            i += 1;
+            continue;
+        }
+        if c == '\\' && i + 1 < chars.len() {
+            i += 2;
+            continue;
+        }
+        if c == '$' && i + 1 < chars.len() && chars[i + 1] == '(' {
+            return true;
+        }
+        if c == '`' {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 fn expand_tilde(token: &str, home_dir: Option<&Path>) -> String {
@@ -178,6 +327,8 @@ fn join_cwd(cwd: &Path, p: &Path) -> PathBuf {
     normalize_lexical(&cwd.join(p))
 }
 
+/// Lexically normalize `.` / `..` without touching the filesystem.
+/// Parent of root stays root (`/..` → `/`). Relative `..` past the start yields empty components popped.
 pub fn normalize_lexical(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for comp in path.components() {
@@ -255,9 +406,39 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn rejects_command_substitution() {
+    fn rejects_unquoted_command_substitution() {
         assert!(reject_command_substitution("rm -rf $(pwd)").is_err());
         assert!(reject_command_substitution("echo `whoami`").is_err());
+        assert!(reject_command_substitution("echo $(rm -rf /)").is_err());
+        assert!(reject_command_substitution("echo \"$(rm -rf /)\"").is_err());
+        assert!(reject_command_substitution("echo \"`rm -rf /`\"").is_err());
+    }
+
+    #[test]
+    fn allows_backticks_inside_single_quotes() {
+        // Go struct tags as data
+        assert!(reject_command_substitution(
+            r#"echo 'type X struct { Rate int `header:"Rate"` }'"#
+        )
+        .is_ok());
+        assert!(reject_command_substitution(
+            r#"cat > binding/header.go <<'EOF'
+type Rate struct {
+    Rate int `header:"Rate"`
+}
+EOF"#
+        )
+        .is_ok());
+        // $() inside single quotes is data, not substitution
+        assert!(reject_command_substitution(r#"echo '$(rm -rf /)'"#).is_ok());
+    }
+
+    #[test]
+    fn unquoted_heredoc_still_rejects_substitution() {
+        assert!(reject_command_substitution(
+            "cat <<EOF\necho $(whoami)\nEOF"
+        )
+        .is_err());
     }
 
     #[test]
@@ -267,5 +448,33 @@ mod tests {
         let cwd = PathBuf::from("/work/repo");
         let exp = expand_path_token("~/secrets", Some(&home), &env, &cwd).expect("ok");
         assert_eq!(exp.expanded, "/home/agent/secrets");
+    }
+
+    #[test]
+    fn parent_path_normalize_is_deterministic() {
+        let cwd = PathBuf::from("/testbed");
+        let env = BTreeMap::new();
+        // ../jq from /testbed → /jq (escapes root)
+        let exp = expand_path_token("../jq", None, &env, &cwd).expect("ok");
+        assert_eq!(exp.expanded, "/jq");
+        // relative within root
+        let cwd2 = PathBuf::from("/testbed/src");
+        let exp2 = expand_path_token("../jq", None, &env, &cwd2).expect("ok");
+        assert_eq!(exp2.expanded, "/testbed/jq");
+        // absolute stays absolute after normalize
+        let exp3 = expand_path_token("/app/../app/bin", None, &env, &cwd).expect("ok");
+        assert_eq!(exp3.expanded, "/app/bin");
+    }
+
+    #[test]
+    fn expand_command_allows_app_paths() {
+        let env = BTreeMap::from([("HOME".into(), "/home/agent".into())]);
+        let cwd = PathBuf::from("/app");
+        let exp = expand_command_paths("ls -la /app", Some(Path::new("/home/agent")), &env, &cwd)
+            .expect("ok");
+        assert!(exp
+            .path_tokens
+            .iter()
+            .any(|p| p.expanded == "/app" || p.expanded.starts_with("/app")));
     }
 }

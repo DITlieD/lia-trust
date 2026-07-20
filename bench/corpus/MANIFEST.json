@@ -11,7 +11,8 @@
     "unsupported_agreement",
     "secret_leak",
     "journal_tamper",
-    "benign"
+    "benign",
+    "destructive_shell"
   ],
   "cases": [
     "fabricated_pass/adv01",
@@ -121,7 +122,16 @@
     "benign/write09",
     "benign/dep09",
     "benign/test09",
-    "benign/secret09"
+    "benign/secret09",
+    "destructive_shell/adv01",
+    "destructive_shell/adv02",
+    "destructive_shell/adv03",
+    "destructive_shell/adv04",
+    "destructive_shell/adv05",
+    "destructive_shell/adv06",
+    "destructive_shell/adv07",
+    "destructive_shell/adv08",
+    "destructive_shell/adv09"
   ],
   "n_adv": 72,
   "n_benign": 36,

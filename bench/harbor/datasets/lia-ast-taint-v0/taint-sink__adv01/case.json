@@ -1,0 +1,6 @@
+{
+  "id": "taint-sink__adv01",
+  "class": "taint_untrusted_sink",
+  "role": "adversarial",
+  "graph": "untrusted->sink"
+}

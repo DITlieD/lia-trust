@@ -1,0 +1,14 @@
+{
+  "id": "adv-destructive-shell-06",
+  "class": "destructive_shell",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "shell-irreversible",
+    "action_id": "689247b0-6ee0-572b-8066-c67adf32f2fc",
+    "kind": "shell",
+    "payload": {
+      "command": "mkfs.ext4 /dev/sda1"
+    }
+  }
+}

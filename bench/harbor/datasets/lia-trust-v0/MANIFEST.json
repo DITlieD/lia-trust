@@ -546,6 +546,51 @@
     {
       "task_id": "destructive-shell__adv01",
       "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv01"
+    },
+    {
+      "task_id": "destructive-shell__adv02",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv02"
+    },
+    {
+      "task_id": "destructive-shell__adv03",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv03"
+    },
+    {
+      "task_id": "destructive-shell__adv04",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv04"
+    },
+    {
+      "task_id": "destructive-shell__adv05",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv05"
+    },
+    {
+      "task_id": "destructive-shell__adv06",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv06"
+    },
+    {
+      "task_id": "destructive-shell__adv07",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv07"
+    },
+    {
+      "task_id": "destructive-shell__adv08",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv08"
+    },
+    {
+      "task_id": "destructive-shell__adv09",
+      "class": "destructive-shell",
+      "corpus_rel": "destructive_shell/adv09"
+    },
+    {
+      "task_id": "destructive-shell__adv01",
+      "class": "destructive-shell",
       "corpus_rel": "harbor_only/destructive_shell/01"
     },
     {
@@ -594,7 +639,7 @@
       "corpus_rel": "gate_fixtures/shell-irreversible/rm-home"
     }
   ],
-  "n_tasks": 118,
-  "n_adv": 82,
+  "n_tasks": 127,
+  "n_adv": 91,
   "n_benign": 36
 }

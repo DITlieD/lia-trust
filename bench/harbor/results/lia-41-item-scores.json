@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-07-20T01:45:02.514657+00:00",
+  "item_count": 41,
+  "items_done": 41,
+  "items": {
+    "P0-1": {
+      "status": "DONE"
+    },
+    "P0-2": {
+      "status": "DONE"
+    },
+    "P0-3": {
+      "status": "DONE"
+    },
+    "P0-4": {
+      "status": "DONE"
+    },
+    "P0-5": {
+      "status": "DONE"
+    },
+    "P0-6": {
+      "status": "DONE"
+    },
+    "P0-7": {
+      "status": "DONE"
+    },
+    "P1-1": {
+      "status": "DONE"
+    },
+    "P1-2": {
+      "status": "DONE"
+    },
+    "P1-3": {
+      "status": "DONE"
+    },
+    "P1-4": {
+      "status": "DONE"
+    },
+    "P1-5": {
+      "status": "DONE"
+    },
+    "P1-10": {
+      "status": "DONE"
+    },
+    "P1-11": {
+      "status": "DONE"
+    },
+    "P1-12": {
+      "status": "DONE"
+    },
+    "P1-13": {
+      "status": "DONE-DOC"
+    },
+    "P1-14": {
+      "status": "DONE"
+    },
+    "P1-20": {
+      "status": "DONE"
+    },
+    "P1-21": {
+      "status": "DONE-DOC"
+    },
+    "P1-22": {
+      "status": "DONE-DOC"
+    },
+    "P2-1": {
+      "status": "DONE"
+    },
+    "P2-2": {
+      "status": "DONE"
+    },
+    "P2-3": {
+      "status": "DONE",
+      "note": "memo reduces spawn; not separate daemon"
+    },
+    "P2-4": {
+      "status": "DONE"
+    },
+    "P2-5": {
+      "status": "DONE"
+    },
+    "P2-10": {
+      "status": "DONE"
+    },
+    "P2-11": {
+      "status": "DONE"
+    },
+    "P2-12": {
+      "status": "DONE"
+    },
+    "P2-13": {
+      "status": "DONE"
+    },
+    "P2-14": {
+      "status": "DONE"
+    },
+    "P2-15": {
+      "status": "DONE"
+    },
+    "P2-16": {
+      "status": "DONE"
+    },
+    "P2-17": {
+      "status": "DONE"
+    },
+    "P3-1": {
+      "status": "DONE-DOC"
+    },
+    "P3-2": {
+      "status": "DONE-DOC"
+    },
+    "P3-3": {
+      "status": "DONE"
+    },
+    "P3-4": {
+      "status": "DONE-DOC"
+    },
+    "P3-5": {
+      "status": "DONE-DOC"
+    },
+    "P3-6": {
+      "status": "DONE-DOC"
+    },
+    "P3-7": {
+      "status": "DONE"
+    },
+    "P3-8": {
+      "status": "DONE-DOC"
+    }
+  },
+  "trust": {
+    "arm_b_catch": 1.0,
+    "arm_b_false_block": 0.0,
+    "arm_c_catch": 1.0,
+    "arm_c_false_block": 0.0,
+    "arm_c_residual": 0.0,
+    "arm_c_verify_ok": true,
+    "arm_c_n_adv": 81,
+    "destructive_shell_arm_c": {
+      "n": 9,
+      "catch": 9,
+      "false_block": 0
+    }
+  },
+  "utility_companion": {
+    "tb2_post_fix_subset6": {
+      "n": 6,
+      "SHELL_OUT_OF_SCOPE": 0,
+      "SHELL_DESTRUCTIVE": 1,
+      "token_ratio_on_off_subset": 1.2596608401722553,
+      "mean_reward": 0.6666666666666666
+    }
+  },
+  "analysis_doc": "bench/harbor/results/LIA-41-ITEM-SCORES-AND-ANALYSIS.md"
+}

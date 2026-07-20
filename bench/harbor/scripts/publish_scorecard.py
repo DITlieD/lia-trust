@@ -2,11 +2,18 @@
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 RES = ROOT / "bench" / "harbor" / "results"
+RUNS = ROOT / "bench" / "harbor" / "runs"
+
+REASON_RE = re.compile(r"reason_code=([A-Z0-9_]+)")
+DENY_MARKER_RE = re.compile(r"\[lia\] denied")
+DENY_BY_REASON_JSON_RE = re.compile(r"\[lia\] deny_by_reason=(\{[^}]+\})")
 
 
 def load(name: str):
@@ -16,6 +23,34 @@ def load(name: str):
     return json.loads(p.read_text())
 
 
+def recount_deny_by_reason(job_glob: str) -> dict[str, int]:
+    """Histogram of reason_code from TerminusLia trajectories under a job tree."""
+    counts: Counter[str] = Counter()
+    roots = sorted(RUNS.glob(job_glob), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not roots:
+        return {}
+    job = roots[0]
+    for traj in job.rglob("trajectory.json"):
+        try:
+            text = traj.read_text(errors="replace")
+        except OSError:
+            continue
+        # Prefer explicit histograms emitted by TerminusLia 0.2+
+        for m in DENY_BY_REASON_JSON_RE.finditer(text):
+            try:
+                hist = json.loads(m.group(1))
+                for k, v in hist.items():
+                    counts[str(k)] += int(v)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+        for m in REASON_RE.finditer(text):
+            counts[m.group(1)] += 1
+        # Fallback marker-only count when no reason_code (pre-fix runs)
+        if not REASON_RE.search(text) and DENY_MARKER_RE.search(text):
+            counts["UNPARSED_DENY_MARKER"] += len(DENY_MARKER_RE.findall(text))
+    return dict(counts)
+
+
 def main() -> None:
     trust = load("lia-trust-v0-three-arm.json") or {}
     m = trust.get("metrics") or {}
@@ -23,6 +58,14 @@ def main() -> None:
     tb2_off, tb2_on = load("tb2-off.json"), load("tb2-on.json")
     claw_off = load("claw-off.json") or load("claw-off-overlap10.json")
     claw_on = load("claw-on.json") or load("claw-on-overlap10.json")
+
+    tb2_deny = recount_deny_by_reason("tb2-on/*")
+    claw_deny = recount_deny_by_reason("claw-on/*")
+    # Prefer explicit result-file histograms when present (post P0 runs)
+    if tb2_on and isinstance(tb2_on.get("deny_by_reason"), dict):
+        tb2_deny = tb2_on["deny_by_reason"]
+    if claw_on and isinstance(claw_on.get("deny_by_reason"), dict):
+        claw_deny = claw_on["deny_by_reason"]
 
     def util_delta(off, on):
         if not off or not on:
@@ -62,6 +105,15 @@ def main() -> None:
             "trust_overhead_arm_a_tokens_mean": (a.get("overhead") or {}).get(
                 "model_tokens_mean"
             ),
+            "deny_by_reason": {
+                "tb2_on": tb2_deny,
+                "claw_on": claw_deny,
+            },
+            "path_honesty": {
+                "terminus_lia": "shell-irreversible only; ground/syco/ast CANNOT-OBSERVE",
+                "trust_live_tool_loop": "full gate set + ground + syco; not pooled with Terminus",
+                "destructive_shell_arm_c": "A/B-only unless live class present in metrics",
+            },
         },
         "lanes": {
             "lia-trust-v0": {
@@ -85,6 +137,7 @@ def main() -> None:
                 "off": tb2_off,
                 "on": tb2_on,
                 "delta": util_delta(tb2_off, tb2_on),
+                "deny_by_reason": tb2_deny,
             },
             "claw-swe-lite": {
                 "status": "MEASURED"
@@ -94,6 +147,7 @@ def main() -> None:
                 "off": claw_off,
                 "on": claw_on,
                 "delta": util_delta(claw_off, claw_on),
+                "deny_by_reason": claw_deny,
             },
         },
     }

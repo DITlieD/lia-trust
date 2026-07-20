@@ -17,6 +17,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 lia-protocol = { workspace = true }
 lia-gates = { workspace = true }
+regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

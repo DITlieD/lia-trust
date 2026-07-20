@@ -1,0 +1,14 @@
+{
+  "id": "adv-destructive-shell-07",
+  "class": "destructive_shell",
+  "role": "adversarial",
+  "entry": "request",
+  "request": {
+    "gate_id": "shell-irreversible",
+    "action_id": "042fec9a-d05a-56f2-b252-3ad83a959af3",
+    "kind": "shell",
+    "payload": {
+      "command": "dd if=/dev/zero of=/dev/sda"
+    }
+  }
+}

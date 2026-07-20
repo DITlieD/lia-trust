@@ -73,6 +73,15 @@ fn detect_secrets(text: &str) -> Vec<String> {
         (r"xox[baprs]-[A-Za-z0-9-]{10,}", "slack_token"),
         (r"(?i)api[_-]?key\s*[:=]\s*\S{16,}", "api_key"),
         (r"(?i)password\s*[:=]\s*\S{8,}", "password"),
+        // OpenAI project / user / service keys
+        (r"\bsk-proj-[A-Za-z0-9_\-]{20,}\b", "openai_project_key"),
+        (r"\bsk-[A-Za-z0-9]{20,}\b", "openai_api_key"),
+        // Anthropic
+        (r"\bsk-ant-[A-Za-z0-9_\-]{20,}\b", "anthropic_api_key"),
+        // Google / Gemini API keys
+        (r"\bAIza[0-9A-Za-z_\-]{20,}\b", "google_api_key"),
+        // HuggingFace
+        (r"\bhf_[A-Za-z0-9]{20,}\b", "huggingface_token"),
     ];
     for (pat, kind) in patterns {
         if let Ok(re) = Regex::new(pat) {
@@ -82,4 +91,43 @@ fn detect_secrets(text: &str) -> Vec<String> {
         }
     }
     hits
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn detects_sk_proj_openai_project_key() {
+        let req = GateRequest {
+            gate_id: "secret-output".into(),
+            action_id: Uuid::new_v4(),
+            kind: None,
+            payload: crate::GatePayload {
+                text: Some(
+                    "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD".into(),
+                ),
+                ..crate::GatePayload::default()
+            },
+        };
+        let out = check_secret_output(&req).expect("eval");
+        assert!(matches!(out.verdict, Verdict::Deny));
+        assert_eq!(out.reason_code, "SECRET_IN_OUTPUT");
+    }
+
+    #[test]
+    fn clean_text_allows() {
+        let req = GateRequest {
+            gate_id: "secret-output".into(),
+            action_id: Uuid::new_v4(),
+            kind: None,
+            payload: crate::GatePayload {
+                text: Some("hello world no secrets here".into()),
+                ..crate::GatePayload::default()
+            },
+        };
+        let out = check_secret_output(&req).expect("eval");
+        assert!(matches!(out.verdict, Verdict::Allow));
+    }
 }

@@ -1,0 +1,16 @@
+{
+  "allowed_roots": [
+    "/app",
+    "/testbed"
+  ],
+  "home_dir": "/home/agent",
+  "cwd": "/testbed",
+  "protected_paths": [
+    "/testbed/.lia"
+  ],
+  "registry": {},
+  "env": {
+    "HOME": "/home/agent"
+  },
+  "run_id": "11111111-1111-1111-1111-111111111111"
+}

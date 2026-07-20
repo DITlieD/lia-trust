@@ -1,0 +1,51 @@
+{
+  "job": "bench/harbor/runs/tb2-off/2026-07-19__01-58-07",
+  "status": "RUNNING",
+  "finished_at": null,
+  "n_total": 24,
+  "stats": {
+    "n_completed_trials": 4,
+    "n_errored_trials": 1,
+    "n_running_trials": 1,
+    "n_pending_trials": 19,
+    "n_cancelled_trials": 0,
+    "n_retries": 0,
+    "evals": {
+      "terminus-2__swe-1-6__terminal-bench-2": {
+        "n_trials": 4,
+        "n_errors": 1,
+        "metrics": [
+          {
+            "mean": 0.5
+          }
+        ],
+        "pass_at_k": {},
+        "reward_stats": {
+          "reward": {
+            "0.0": [
+              "gpt2-codegolf__5YYVgkw",
+              "hf-model-inference__ron5s5Y"
+            ],
+            "1.0": [
+              "configure-git-webserver__7Gxwxxz",
+              "fix-git__QXgdNfd"
+            ]
+          }
+        },
+        "exception_stats": {
+          "AgentTimeoutError": [
+            "gpt2-codegolf__5YYVgkw"
+          ]
+        }
+      }
+    },
+    "n_input_tokens": 665404,
+    "n_cache_tokens": 0,
+    "n_output_tokens": 22788,
+    "cost_usd": null
+  },
+  "mean_reward": 0.5,
+  "n_input_tokens": 665404,
+  "n_output_tokens": 22788,
+  "updated_at": "2026-07-18T17:20:36.904610+00:00"
+}
