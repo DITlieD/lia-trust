@@ -5,9 +5,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{
-    assert_adapter, evaluate_generic_action, evaluate_named_gate, handle_jsonrpc,
-    handle_pre_tool_stdin, known_adapters, report_for_adapter, wrap, DenialRecord, GenericAction,
-    InspectionContext, RunContext, WrapOptions,
+    assert_adapter, default_claude_home, default_codex_home, default_lia_home, evaluate_generic_action,
+    evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin, install as install_kernel,
+    known_adapters, looks_like_live_user_home, report_for_adapter, status as install_status,
+    uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction, InspectionContext,
+    InstallRequest, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
@@ -307,6 +309,60 @@ enum Commands {
         adapter: Option<String>,
         #[arg(long)]
         request: Option<String>,
+    },
+    /// Install LIA Trust Kernel into Claude Code + Codex harness configs.
+    ///
+    /// One-command TCB wiring: PreToolUse hook (Claude Code) + MCP proxy (Codex).
+    /// Default is safe for fixtures: refuse writing real ~/.claude / ~/.codex unless
+    /// `--apply-live` is set. Use `--dry-run` to print the planned merge.
+    Install {
+        #[arg(long)]
+        lia_home: Option<PathBuf>,
+        #[arg(long)]
+        lia_bin: Option<PathBuf>,
+        #[arg(long)]
+        claude_home: Option<PathBuf>,
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Allow writing the real user ~/.claude and ~/.codex (creates backups via merge only).
+        #[arg(long, default_value_t = false)]
+        apply_live: bool,
+        #[arg(long)]
+        allowed_root: Vec<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Report whether LIA is installed on Claude Code / Codex configs.
+    Status {
+        #[arg(long)]
+        lia_home: Option<PathBuf>,
+        #[arg(long)]
+        lia_bin: Option<PathBuf>,
+        #[arg(long)]
+        claude_home: Option<PathBuf>,
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Remove LIA hook/MCP wiring from Claude Code + Codex (state dir retained).
+    Uninstall {
+        #[arg(long)]
+        lia_home: Option<PathBuf>,
+        #[arg(long)]
+        lia_bin: Option<PathBuf>,
+        #[arg(long)]
+        claude_home: Option<PathBuf>,
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        #[arg(long, default_value_t = false)]
+        apply_live: bool,
+        #[arg(long, default_value_t = false)]
+        json: bool,
     },
 }
 
@@ -657,7 +713,185 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             adapter,
             request,
         ),
+        Commands::Install {
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            dry_run,
+            apply_live,
+            allowed_root,
+            json,
+        } => run_install(
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            dry_run,
+            apply_live,
+            allowed_root,
+            json,
+        ),
+        Commands::Status {
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            json,
+        } => run_install_status(lia_home, lia_bin, claude_home, codex_home, json),
+        Commands::Uninstall {
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            dry_run,
+            apply_live,
+            json,
+        } => run_uninstall(
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            dry_run,
+            apply_live,
+            json,
+        ),
     }
+}
+
+fn resolve_lia_bin(explicit: Option<PathBuf>) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(p) = explicit {
+        return Ok(p);
+    }
+    if let Ok(p) = std::env::current_exe() {
+        return Ok(p);
+    }
+    Ok(PathBuf::from("lia"))
+}
+
+fn build_install_request(
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    dry_run: bool,
+    apply_live: bool,
+    allowed_root: Vec<PathBuf>,
+) -> Result<InstallRequest, Box<dyn std::error::Error>> {
+    let claude_home = claude_home.unwrap_or_else(default_claude_home);
+    let codex_home = codex_home.unwrap_or_else(default_codex_home);
+    if !dry_run && looks_like_live_user_home(&claude_home, &codex_home) && !apply_live {
+        return Err(
+            "refusing to modify live ~/.claude or ~/.codex without --apply-live \
+             (use fixture --claude-home/--codex-home for tests, or --dry-run)"
+                .into(),
+        );
+    }
+    Ok(InstallRequest {
+        lia_home: lia_home.unwrap_or_else(default_lia_home),
+        lia_bin: resolve_lia_bin(lia_bin)?,
+        claude_home,
+        codex_home,
+        dry_run,
+        apply_live,
+        allowed_roots: allowed_root,
+    })
+}
+
+fn emit_install_report(
+    report: &lia_adapters::InstallReport,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(report)?);
+    } else {
+        println!("action: {}", report.action);
+        println!("dry_run: {}", report.dry_run);
+        println!("lia_home: {}", report.lia_home.display());
+        println!("claude_settings: {}", report.claude_settings.display());
+        println!("codex_config: {}", report.codex_config.display());
+        println!("claude_hook_installed: {}", report.claude_hook_installed);
+        println!("codex_mcp_installed: {}", report.codex_mcp_installed);
+        println!("kernel: {}", report.kernel.name);
+        println!("assurance: {}", report.kernel.assurance);
+        println!("enforced_on:");
+        for e in &report.kernel.enforced_on {
+            println!("  - {e}");
+        }
+        println!("cannot_observe:");
+        for e in &report.kernel.cannot_observe {
+            println!("  - {e}");
+        }
+        for n in &report.notes {
+            println!("note: {n}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn run_install(
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    dry_run: bool,
+    apply_live: bool,
+    allowed_root: Vec<PathBuf>,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let req = build_install_request(
+        lia_home,
+        lia_bin,
+        claude_home,
+        codex_home,
+        dry_run,
+        apply_live,
+        allowed_root,
+    )?;
+    let report = install_kernel(&req).map_err(|e| e.to_string())?;
+    emit_install_report(&report, json)
+}
+
+fn run_install_status(
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let req = InstallRequest {
+        lia_home: lia_home.unwrap_or_else(default_lia_home),
+        lia_bin: resolve_lia_bin(lia_bin)?,
+        claude_home: claude_home.unwrap_or_else(default_claude_home),
+        codex_home: codex_home.unwrap_or_else(default_codex_home),
+        dry_run: false,
+        apply_live: false,
+        allowed_roots: vec![],
+    };
+    let report = install_status(&req).map_err(|e| e.to_string())?;
+    emit_install_report(&report, json)
+}
+
+fn run_uninstall(
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    dry_run: bool,
+    apply_live: bool,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let req = build_install_request(
+        lia_home,
+        lia_bin,
+        claude_home,
+        codex_home,
+        dry_run,
+        apply_live,
+        vec![],
+    )?;
+    let report = uninstall_kernel(&req).map_err(|e| e.to_string())?;
+    emit_install_report(&report, json)
 }
 
 fn run_core_gate(

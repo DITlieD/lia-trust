@@ -100,7 +100,14 @@ fn lint_json_value(path: &Path, v: &serde_json::Value, findings: &mut Vec<Claims
 
 fn looks_like_rate_claim(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
-    if !(lower.contains("rate")
+    // Word-boundary match for "rate" so Strategy/Generated/operate do not trip the lint.
+    let has_rate_word = lower.split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_').any(|w| {
+        w == "rate" || w.ends_with("-rate") || w.starts_with("rate-") || w.contains("catch-rate")
+            || w == "catch_rate" || w == "false_block_rate" || w.ends_with("_rate")
+    }) || lower.contains("catch-rate")
+        || lower.contains("false-block")
+        || lower.contains("false_block");
+    if !(has_rate_word
         || lower.contains("percent")
         || lower.contains('%')
         || lower.contains("trust-integrity"))

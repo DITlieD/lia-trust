@@ -187,7 +187,8 @@ fn map_proxy_args(name: &str, args: &Value) -> Result<(ActionKind, GatePayload),
                 },
             ))
         }
-        PROXY_TOOL_SHELL => {
+        PROXY_TOOL_SHELL | "run_shell" | "Bash" => {
+            // live tool-loop and some agents emit run_shell / Bash aliases
             let command = args
                 .get("command")
                 .and_then(|v| v.as_str())

@@ -5,6 +5,7 @@ mod contracts;
 mod codex;
 mod dispatch;
 mod generic;
+mod install;
 mod mcp_inspection;
 
 pub use assurance::{
@@ -29,6 +30,13 @@ pub use generic::{admit_final_diff, wrap, WrapOptions, WrapReport};
 pub use mcp_inspection::{
     handle_inspection_call, inspection_tool_names, load_probe, refuse_mutation, DenialRecord,
     InspectionContext,
+};
+pub use install::{
+    claude_hook_present, codex_mcp_present, default_claude_home, default_codex_home,
+    default_lia_home, install, looks_like_live_user_home, merge_claude_settings, merge_codex_toml,
+    status, uninstall, unmerge_claude_settings, unmerge_codex_toml, InstallError, InstallPaths,
+    InstallReport, InstallRequest, KernelBoundary, CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER,
+    LIA_HOOK_MARKER, MANIFEST_NAME,
 };
 
 use lia_gates::{evaluate_action_gates, evaluate_gate, GateConfig, GateOutcome, GatePayload, GateRequest};
@@ -223,4 +231,52 @@ mod tests {
             .iter()
             .any(|g| g.gate_id == "shell-irreversible" && g.cell == GateCell::Prevent));
     }
+
+    #[test]
+    fn admit_write_ast_catches_python_eval() {
+        let reason = admit_write_with_ast(
+            std::path::Path::new("evil.py"),
+            "x = eval(user_input)\n",
+        )
+        .expect("scan");
+        assert_eq!(reason.as_deref(), Some("AST_EVAL"));
+    }
+
+    #[test]
+    fn admit_taint_graph_denies_untrusted_to_sink() {
+        let g = r#"{"nodes":[{"id":"s","kind":"untrusted_source"},{"id":"k","kind":"destructive_sink"}],"edges":[{"from":"s","to":"k"}]}"#;
+        let (allow, code) = admit_taint_graph(g).expect("taint");
+        assert!(!allow);
+        assert_eq!(code, "TAINT_UNTRUSTED_TO_DESTRUCTIVE_SINK");
+    }
+}
+
+/// Optional AST gate on write/diff admission (P1-11). Returns deny reason if blocked.
+pub fn admit_write_with_ast(
+    path: &std::path::Path,
+    text: &str,
+) -> Result<Option<String>, AdapterError> {
+    use lia_ast::{scan_source, Language, ScanOptions};
+    let lang = match path.extension().and_then(|e| e.to_str()) {
+        Some("py") => Language::Python,
+        Some("rs") => Language::Rust,
+        Some("js") | Some("mjs") | Some("cjs") => Language::Javascript,
+        _ => return Ok(None),
+    };
+    let opts = ScanOptions::default();
+    let report =
+        scan_source(text, lang, &opts).map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    if let Some(hit) = report.hits.first() {
+        return Ok(Some(hit.predicate.reason_code().to_string()));
+    }
+    Ok(None)
+}
+
+/// Invoke taint check_flows when graph supplied (P1-12).
+pub fn admit_taint_graph(graph_json: &str) -> Result<(bool, String), AdapterError> {
+    use lia_taint::{check_flows, parse_graph, TaintVerdict};
+    let g = parse_graph(graph_json).map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    let r = check_flows(&g).map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    let allow = matches!(r.verdict, TaintVerdict::Allow);
+    Ok((allow, r.reason_code.clone()))
 }

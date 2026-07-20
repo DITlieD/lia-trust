@@ -7,6 +7,14 @@
   },
   "claude_code": {
     "hook_event_pre_tool_use": "PreToolUse",
+    "settings_file": "settings.json",
+    "settings_hooks_key": "hooks",
+    "settings_pre_tool_use_key": "PreToolUse",
+    "hook_entry_fields": ["matcher", "hooks"],
+    "hook_command_fields": ["type", "command", "timeout"],
+    "hook_command_type": "command",
+    "install_matcher": "Bash|Write|Edit|Read|Delete|MultiEdit",
+    "install_marker": "lia-trust-kernel",
     "stdin_fields": [
       "session_id",
       "prompt_id",
@@ -48,6 +56,23 @@
     "reply": "codex-reply",
     "session_args": ["prompt"],
     "reply_args": ["threadId", "prompt"]
+  },
+  "codex_install": {
+    "config_file": "config.toml",
+    "mcp_servers_table": "mcp_servers",
+    "lia_server_name": "lia-trust",
+    "server_fields": ["command", "args", "startup_timeout_sec"],
+    "transport": "stdio",
+    "install_marker": "lia-trust-kernel"
+  },
+  "kernel_install": {
+    "cli": ["install", "status", "uninstall"],
+    "lia_home_env": "LIA_HOME",
+    "default_lia_home": "~/.lia-trust",
+    "state_layout": ["keys/signing.hex", "journal/default.db", "config.json", "bin/claude-pretool.sh", "bin/codex-mcp.sh", "install-manifest.json", "probe.json"],
+    "live_home_guard": "--apply-live required for real ~/.claude and ~/.codex",
+    "assurance": "GATE",
+    "forbid_confine_v1": true
   },
   "capability_keys": [
     "pre_write_block",
