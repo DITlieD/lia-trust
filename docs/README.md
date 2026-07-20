@@ -8,28 +8,62 @@ false-block on the trust corpus), not utility pass-rate.
 receipts + seven gates + offline verify + thin adapters. It is **not** the
 commercial Harness / Canvas product layers.
 
-## Five-minute quickstart
+## One-line install (recommended)
+
+From a **clone** of this repo:
 
 ```bash
-# 1. Build
-cargo build -p lia-cli --release
-LIA=./target/release/lia
+bash install.sh
+```
 
-# 2. Install into Claude Code + Codex (fixture-safe by default)
-#    Real ~/.claude and ~/.codex need --apply-live
-$LIA install --apply-live
+Classic **curl | bash** style (after the repo is public / raw URL works):
 
-# 3. Confirm
-$LIA status
+```bash
+curl -fsSL https://raw.githubusercontent.com/lia-trust/lia-trust/main/install.sh | bash
+```
+
+That script will:
+
+1. Build `lia` (or reuse `target/release/lia` if present)
+2. Install the binary to `~/.local/bin/lia`
+3. Wire **Claude Code** + **Codex** with `lia install --apply-live`
+
+### Installer knobs (env)
+
+| Env | Effect |
+|-----|--------|
+| `LIA_NO_WIRE=1` | Binary only — do not touch `~/.claude` / `~/.codex` |
+| `LIA_DRY_RUN=1` | Plan harness merge only |
+| `LIA_PREFIX=~/.local` | Install prefix (`bin/lia`) |
+| `LIA_FORCE_BUILD=1` | Always rebuild |
+
+Examples:
+
+```bash
+# binary only
+LIA_NO_WIRE=1 bash install.sh
+
+# dry-run harness wiring
+LIA_DRY_RUN=1 bash install.sh
+```
+
+### After install
+
+```bash
+lia status
 # claude_hook_installed: true
 # codex_mcp_installed: true
 # assurance: GATE … never CONFINE
 
-# 4. Offline verify after a session
-$LIA journal-verify ~/.lia-trust/journal/default.db
+lia journal-verify ~/.lia-trust/journal/default.db
+lia uninstall --apply-live    # remove wiring; keeps journal/keys
+```
 
-# 5. Remove wiring (keeps journal/keys)
-$LIA uninstall --apply-live
+### Manual (no install.sh)
+
+```bash
+cargo build -p lia-cli --release
+./target/release/lia install --apply-live
 ```
 
 What install does:
