@@ -88,5 +88,6 @@ PY
 
 echo "== IS-4 claims-lint =="
 "$LIA" claims-lint --root "$ROOT/docs"
+"$LIA" claims-lint --root "$ROOT/README.md"
 
 echo "IS-4 OK harness=$HARNESS agent_mode=recorded-agent verify_on=$VE_ON verify_off=$VE_OFF"

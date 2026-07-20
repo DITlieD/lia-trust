@@ -27,9 +27,9 @@ pass-rate.
 | Network egress PREVENT | capability key false | Host/network sandbox |
 | Credential broker | missing | Broker product surface |
 | Live registry dependency fetch | fixture only | Registry integration |
-| Claim extraction from free text | closed (ELAI) | Harness reasoning layer |
-| Auto-repair after gate fail | closed (ELAI) | Harness recovery |
-| Planning / multi-agent recovery | closed (ELAI) | Harness / Canvas |
+| Claim extraction from free text | closed (LIA) | Harness reasoning layer |
+| Auto-repair after gate fail | closed (LIA) | Harness recovery |
+| Planning / multi-agent recovery | closed (LIA) | Harness / Canvas |
 | Gemini / Cursor adapters | POST-L6 | Adapter pack |
 
 See `docs/guarantee-matrix.md` and `bench/assurance_truth.json`.

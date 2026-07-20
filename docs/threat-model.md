@@ -26,7 +26,7 @@ In scope for v1 Kernel:
 - Offline `lia verify` / `journal-verify`
 - Thin adapters: Claude Code **PreToolUse** hook, Codex **MCP** proxy, generic wrap (honest partial mediation)
 
-Out of scope (not Kernel / ELAI or POST-L6):
+Out of scope (not Kernel / commercial LIA or POST-L6):
 
 - Planning, recovery, multi-agent orchestration, claim extraction
 - Process/network **CONFINE**, credential broker, live package registries

@@ -82,5 +82,6 @@ echo "== local-IS-5 conformance via producer binary =="
 
 echo "== local-IS-5 claims-lint =="
 "$VERIFY_LIA" claims-lint --root "$ROOT/docs"
+"$VERIFY_LIA" claims-lint --root "$ROOT/README.md"
 
 echo "local-IS-5 OK producer=$PROD_LIA verifier=$VERIFY_LIA bundle=$BUNDLE assurance=AUDIT"

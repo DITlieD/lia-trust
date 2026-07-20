@@ -88,4 +88,5 @@ assert d.get("verify_ok") is True
 PY
 
 "$LIA" claims-lint --root "$ROOT/docs"
+"$LIA" claims-lint --root "$ROOT/README.md"
 echo "OUT=$OUT model=$CHOSEN"

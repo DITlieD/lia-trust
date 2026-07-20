@@ -20,13 +20,13 @@ requires commercial / POST-L6 surfaces. Source capability rollup:
 
 | Non-guarantee | Why | Where to buy / wait |
 |---------------|-----|---------------------|
-| Complete mediation | Hooks/MCP are bypassable without process confine | ELAI / POST-L6 CONFINE |
+| Complete mediation | Hooks/MCP are bypassable without process confine | LIA / POST-L6 CONFINE |
 | Network egress PREVENT | No egress hook in Claude/Codex v1 | POST-L6 / host sandbox |
 | Credential broker | Not in Kernel | POST-L6 |
 | Live registry dependency check | Fixture snapshot only | POST-L6 |
-| Subagent full visibility | Partial keys only | ELAI multi-agent |
-| Auto-repair after deny | Closed (ELAI) | Commercial Harness |
-| Claim extraction from free text | Closed (ELAI) | Commercial Harness |
+| Subagent full visibility | Partial keys only | LIA multi-agent |
+| Auto-repair after deny | Closed (LIA) | Commercial Harness |
+| Claim extraction from free text | Closed (LIA) | Commercial Harness |
 | CONFINE / namespaces | Forbidden claim in v1 | POST-L6 |
 | Byte-replay of cloud model | Trace-authenticated only (HL-3) | N/A |
 

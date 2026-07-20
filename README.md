@@ -16,10 +16,10 @@ From a **clone** of this repo:
 bash install.sh
 ```
 
-Classic **curl | bash** style (after the repo is public / raw URL works):
+Classic **curl | bash** style:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lia-trust/lia-trust/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DITlieD/lia-trust/main/install.sh | bash
 ```
 
 That script will:
@@ -101,8 +101,10 @@ GATE for shell only; ground/syco/ast are CANNOT-OBSERVE on that path.
 
 ## Useful without commercial harness
 
-LIA Trust Kernel runs as a standalone `lia` binary: install hooks/MCP, gate
-actions, journal receipts, offline verify. No ELAI/Harness/Canvas required.
+LIA Trust is the open, model-neutral safety and verification kernel. LIA is
+the complete autonomous engineering system built on it. The Kernel runs as a
+standalone `lia` binary: install hooks/MCP, gate actions, journal receipts,
+offline verify. No commercial LIA Harness/Canvas required.
 
 ## Do not claim
 

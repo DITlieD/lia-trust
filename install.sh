@@ -26,7 +26,7 @@
 set -euo pipefail
 
 VERSION_HINT="0.1.0"
-DEFAULT_REPO_URL="${LIA_REPO_URL:-https://github.com/lia-trust/lia-trust.git}"
+DEFAULT_REPO_URL="${LIA_REPO_URL:-https://github.com/DITlieD/lia-trust.git}"
 DEFAULT_REF="${LIA_REPO_REF:-main}"
 
 # All human logs go to stderr so $(...) captures only return values (paths).
