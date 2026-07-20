@@ -64,11 +64,11 @@
       "pointer": "bench/harbor/results/claw-off.json + claw-on.json + scorecard.json"
     },
     {
-      "text": "LIA improvement backlog [MEASURED-analysis] root cause: TerminusLia shell gate uses empty tempfile allowed_roots \u2192 SHELL_OUT_OF_SCOPE false denies on /app; grounding/syco not on Terminus path. P0: wire real workspace roots + split soft/hard deny + cap deny loops. See bench/harbor/results/lia-improvement-backlog.json",
+      "text": "LIA feature audit + improvement plan [MEASURED-analysis]: every planned feature scored works/partial/broken/untested with evidence; root cause of utility non-help is TerminusLia shell-only + empty tempfile roots + backtick-blind substitution FPs; ground/syco unwired on TB2/Claw. Backlog 41 items. See LIA-FEATURE-AUDIT-AND-IMPROVEMENT-PLAN.md + lia-improvement-backlog.json",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "bench/harbor/results/lia-improvement-backlog.json"
+      "pointer": "bench/harbor/results/LIA-FEATURE-AUDIT-AND-IMPROVEMENT-PLAN.md + lia-improvement-backlog.json"
     }
   ]
 }
