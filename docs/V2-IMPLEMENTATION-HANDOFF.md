@@ -94,7 +94,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P0-3 | cap identical deny loops | per-command/reason counters and `LIA_DENY_CAP` | SHIPPED | repeated-denial fixture stops forwarding and emits cap | M3 reproof |
 | P0-4 | quote-aware substitution detection | expansion tests and quote-aware scanner | SHIPPED | quoted backticks allow; executable substitution denies | M1/M6 |
 | P0-5 | lexical traversal normalization | `normalize_lexical` plus scope gate | SHIPPED | traversal/out-of-root property cases | M1/M6 |
-| P0-6 | durable Harbor journal | Terminus now creates a per-trial external journal, verifies each chain, binds receipt to head and fails closed; rotation/cleanup remains | PARTIAL | M2 fail-closed proof complete; bounded lifecycle/rotation proof | M3 |
+| P0-6 | durable Harbor journal | Terminus creates a per-trial external journal, verifies each chain, binds receipt to head, rotates by rows/bytes/signed-event age, and recovers only verified bridges | SHIPPED | 4/4 lifecycle CLI cases plus stale-handle, crash-recovery, false-bridge and immutable-archive proofs | M3 complete; M6 reproof |
 | P0-7 | per-trial reason telemetry | `deny_by_reason` output histogram | SHIPPED | integration fixture contains stable reason histogram | M3 |
 | P1-1 | expanded destructive coverage | destructive pattern pack in `shell.rs` | SHIPPED | hard irreversible regression fixtures remain denied | M1/M6 |
 | P1-2 | modern secret patterns | expanded patterns in `secret.rs` | SHIPPED | adversarial secret pack and clean controls | M6 |
@@ -106,14 +106,14 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P1-12 | taint admission | typed `taint_graph` reaches central dispatch; malformed graphs become signed denials | SHIPPED | malicious and malformed production cases both block with receipts | M2 complete; M6 reproof |
 | P1-13 | Claude/Codex measurement | recorded-adapter PREVENT measured; live OAuth agents unmeasured | PARTIAL | current recorded replay; live remains explicit external gate absent credentials | M6 |
 | P1-14 | completion admission | Codex `complete_task` blocks `Incomplete`; Claude/generic/Terminus lack completion channels and say CANNOT-OBSERVE | SHIPPED | supported production entrypoint denial plus exact per-adapter cells | M2 complete; M6 reproof |
-| P1-20 | utility token tax bound | TB2 subset meets bound; Claw full rerun deferred | PARTIAL | local regression proof; external/full rerun precisely labeled | M3/M6 |
+| P1-20 | utility token tax bound | [MEASURED] TB2 post-fix subset ratio 1.2596608401722553 meets its <1.3 target; historical full-24 ratio remains 2.451; Claw historical ratio 1.7355 misses <1.2 | PARTIAL | reproducible scorecard separates subset/historical data; full post-M3 TB2/Claw reruns remain external/cost-gated | M6 |
 | P1-21 | Claw contingency | `claw-utility-contingency.md` | SHIPPED | claims lint and document consistency | M6 |
 | P1-22 | policy-approved in-root `rm -rf` | V2 `cleanup_policy` exact-target gate, compiled CLI test, signed journal and offline verifier | SHIPPED | 4/4 cleanup CLI tests, 17/17 shell fixtures, hard-denial regression matrix | M1 complete; M6 reproof |
-| P2-1 | bounded external/process timeouts | some scripts/timeouts exist; Terminus gate spawn has no timeout | PARTIAL | explicit timeout/cancellation result and fail-closed fixture | M3 |
-| P2-2 | denial telemetry | reason histograms in collector/output | SHIPPED | stable structured counter fixture | M3 |
-| P2-3 | lower gate-process overhead | in-memory decision memo only; no service/daemon | PARTIAL | measured cached path plus correctness and lifecycle proof | M3 |
-| P2-4 | bounded shareable journal | `shareable_anchors` and verifier support | SHIPPED | truncated anchored bundle verifies; tamper fails | M3/M6 |
-| P2-5 | duplicate-command memo | `_decision_memo` | SHIPPED | duplicate fixture avoids respawn; invalidation rules proven | M3 |
+| P2-1 | bounded external/process timeouts | Terminus subprocess calls are deadline-bounded; generic wrap times out, directly kills/reaps its child, journals exit 124, and fails closed on watcher loss | SHIPPED | timeout and watcher-loss integration 2/2; direct-child scope documented | M3 complete; descendant confinement M5 |
+| P2-2 | denial telemetry | cumulative reason, spawn, memo-hit, timeout, latency and memo-size snapshots are emitted structurally per trial | SHIPPED | Python telemetry/memo suite and scorecard parser | M3 complete; M6 reproof |
+| P2-3 | lower gate-process overhead | bounded in-memory denial-only memo; allows are never cached | SHIPPED | [MEASURED] local microbenchmark: real gate+verify+head 25.357 ms versus 0.395 microseconds mean memo hit; no Harbor utility claim | M3 complete |
+| P2-4 | bounded shareable journal | signed head/tail manifest, pinned-key verifier, full archived DB and signed rotation bridge | SHIPPED | anchor tamper rejection and active/archive verification | M3 complete; M6 reproof |
+| P2-5 | duplicate-command memo | TTL/context/capacity-bound verified-denial memo keyed by command and normalized execution context | SHIPPED | duplicate avoids respawn; TTL/context/capacity and never-allow rules proven | M3 complete |
 | P2-10 | L6 docs pack | required public documents now present | SHIPPED | claims lint and file checklist | M6 |
 | P2-11 | assurance drift prevention | runtime probe executes real boundaries, signed rows, independent generic diff, clean verify and negative tamper; install is UNMEASURED | SHIPPED | 3/3 runtime probes match downward-only truth; defaults are AUDIT/CANNOT-OBSERVE | M2 complete; M6 reproof |
 | P2-12 | IS-5 publish path | local action definition, local smoke, and v0.1.0 tag only; no release workflow/prebuilt artifact/sample-repo bundle/different-machine verification evidence | PARTIAL | local prerequisites pass and missing remote/cross-machine proof is either obtained or recorded as an exact external gate | M6 |
@@ -299,8 +299,72 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M3 — telemetry, recovery, performance, lifecycle
 
-- State: pending
+- State: `IMPLEMENTED_AUDIT_PASS` (implementation commit pending)
+- Timestamp: `2026-07-22T06:30:38+09:00`
+- Starting HEAD: `3771ca7b82fd11560278d4e4586d45da0e50ff10`
 - Requirements: P0-2/3/7, P1-20 local portion, P2-1/2/3/4/5
+- RED evidence: the independent auditor first proved that the planned boundaries did not exist:
+  `DenyMemo`/`GateMetrics`, wrap timeout and journal lifecycle CLI commands were absent. Later
+  adversarial source review independently found and blocked unsigned-age rotation, dropped watcher
+  errors, incomplete child cleanup, crash windows, unpinned anchors, overflow, missing fsyncs,
+  concurrent append/rotation races, long-lived SQLite handles spanning rename, and immutable-WAL
+  sidecar bypasses. Each BLOCK was resolved before this milestone was accepted.
+- Completed behavior: Terminus now uses a TTL/context/capacity-bound memo for independently verified
+  denials only (allows are never cached), bounded gate/verifier processes, reason/spawn/hit/timeout/
+  latency/memo-size telemetry, and automatic journal maintenance. Generic wrap owns a deadline,
+  kills and reaps the direct child, records stable timeout/observation-failure reasons and never
+  releases a child that may still be live. Cleanup diagnostics are count+first+last bounded.
+- Journal architecture: journal handles retain paths, not SQLite connections. Every live read/write
+  opens an ephemeral connection under a cross-process lifecycle lock; rotation holds that lock over
+  recovery, checkpoint, durable signed state, both renames, directory fsyncs and final validation.
+  Pre-rotation handles therefore follow the new active path. Recovery promotes only a signed bridge
+  whose canonical archive, row count and prior head all verify. A false/orphan bridge never creates
+  a fresh genesis journal. Replacement lock artifacts are removed in normal, stale and recovery
+  paths.
+- Share/offline behavior: rotation preserves the complete old database and begins the new active
+  journal with a signed bridge. Signed head/tail manifests require an operator-pinned Ed25519 public
+  key and authenticate retained hashes without claiming to prove the omitted middle. Normal reads
+  join the lifecycle lock. Explicit `journal-verify --immutable` is only for stable offline copies;
+  it canonicalizes the target, preserves native path bytes, refuses WAL/SHM/rollback entries or
+  metadata errors, and uses SQLite immutable read-only mode without adjacent lock state.
+- RED-to-GREEN evidence: focused lifecycle audit passed 6/6 after the path-only refactor; journal CLI
+  integration passed 4/4; wrap lifecycle passed 2/2; missing-open, cross-connection serialization,
+  stale-handle and immutable canonical-sidecar cases all passed. The final security source review
+  returned PASS with no remaining crash, lock-order, stale-inode, recovery or immutable-sidecar
+  BLOCK.
+- Full independent audit [MEASURED]: Python Harbor tests 11/11. Rust workspace 129/129 distinct tests and 140
+  executions passed; `cargo check --workspace`, scoped strict clippy for journal/adapters/CLI,
+  gate-freeze, wire-check, targeted rustfmt, six-file Python compilation, changed/new JSON parsing
+  and `git diff --check` all passed. After claims-lint was found traversing ignored `.venv`, datasets,
+  runs and internal session files, its boundary was made explicit without excluding public docs or
+  `bench/harbor/results`; claims unit tests passed 3/3 and repository-root claims-lint finished clean.
+- Performance evidence [MEASURED]: `bench/harbor/results/m3-deny-memo-measure.json` records one local run where a
+  real gate plus journal verification and receipt-head validation took 25.357 ms and 10,000 verified
+  denial memo hits averaged 0.395 microseconds, an observed 64133.903x ratio [MEASURED]. This is
+  `LOCAL_MICROBENCHMARK_NOT_HARBOR_UTILITY`, not a daemon claim and not a TB2/Claw rerun.
+- Utility honesty [MEASURED]: the scorecard now consumes an explicit historical full-24 TB2 artifact and the
+  post-fix subset separately. TB2 subset token ratio 1.2596608401722553 meets its <1.3 local target;
+  the historical full-24 ratio is ~2.451. Claw remains historical at ~1.7355, above <1.2. No full
+  post-M3 Harbor utility run occurred; gate telemetry fields say `NOT_REMEASURED_AFTER_M3` when no
+  current trajectory snapshot exists.
+- Files changed: journal/CLI/generic/Claude adapter sources and lifecycle integrations; Terminus
+  decision/telemetry/publisher code and tests; reproducibility/measurement artifacts; README,
+  claims and historical analysis labels; claims-lint traversal/false-positive boundaries; this
+  handoff.
+- Dependencies: none added.
+- Assurance ceiling and retained limits: `GATE`, not CONFINE. Generic cleanup owns only the direct
+  wrapped child, not descendant process groups or egress. A persistent kernel refusal to kill/reap
+  deliberately exceeds the nominal deadline in fail-stop mode rather than returning with a live
+  child. The local memo result is one machine microbenchmark. Full Harbor utility and live gate
+  telemetry remain unmeasured after M3. Signed state protects cooperative continuity within the
+  same-UID threat model; separate-principal evidence/key ownership belongs to M5.
+- Off-agent evidence [MEASURED]: successive `m2_auditor`, `m1_auditor`, and `terminus_red_auditor` RED/BLOCK/
+  GREEN verdicts are transcribed here. The final long auditor turn hit the account subagent usage
+  ceiling only after returning all command results and identifying the claims-lint BLOCK; the
+  independent `m1_auditor` then verified the fix with 4/4 audit tiers PASS.
+- Blocker: none.
+- Next action: commit M3, record its hash, then begin M4 RED contracts/adapter/public-verification
+  fixtures from current official interface evidence.
 - Commit: pending
 
 ### M4 — process contracts and adapter/public-verification fast-follows

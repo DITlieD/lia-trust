@@ -20,7 +20,11 @@ pub fn claims_lint(root: &Path) -> Result<Vec<ClaimsLintFinding>, BenchError> {
     if !root.exists() {
         return Ok(findings);
     }
-    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|entry| !is_ignored_tree(entry))
+        .filter_map(|e| e.ok())
+    {
         if !entry.file_type().is_file() {
             continue;
         }
@@ -54,23 +58,44 @@ pub fn claims_lint(root: &Path) -> Result<Vec<ClaimsLintFinding>, BenchError> {
     Ok(findings)
 }
 
+fn is_ignored_tree(entry: &walkdir::DirEntry) -> bool {
+    if !entry.file_type().is_dir() {
+        return false;
+    }
+    let name = entry.file_name().to_string_lossy();
+    if matches!(name.as_ref(), "datasets" | "runs")
+        && entry
+            .path()
+            .ancestors()
+            .any(|ancestor| ancestor.ends_with(Path::new("bench/harbor")))
+    {
+        return true;
+    }
+    matches!(
+        name.as_ref(),
+        ".git"
+            | ".venv"
+            | "venv"
+            | "target"
+            | "node_modules"
+            | ".tox"
+            | ".mypy_cache"
+            | ".pytest_cache"
+            | "__pycache__"
+            | "docs-internal"
+    )
+}
+
 fn lint_json_value(path: &Path, v: &serde_json::Value, findings: &mut Vec<ClaimsLintFinding>) {
     match v {
         serde_json::Value::Object(map) => {
             if let Some(claims) = map.get("claims").and_then(|c| c.as_array()) {
                 for (i, claim) in claims.iter().enumerate() {
-                    let text = claim
-                        .get("text")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("");
+                    let text = claim.get("text").and_then(|t| t.as_str()).unwrap_or("");
                     let tags = claim
                         .get("tags")
                         .and_then(|t| t.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|x| x.as_str())
-                                .collect::<Vec<_>>()
-                        })
+                        .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>())
                         .unwrap_or_default();
                     let tagged = tags.iter().any(|t| *t == "MEASURED" || *t == "EXTERNAL");
                     if looks_like_rate_claim(text) && !tagged {
@@ -136,9 +161,26 @@ const SUPERLATIVES: &[&str] = &[
 
 /// Metric nouns that make a nearby bare number a quantitative claim even without "rate"/"%".
 const METRIC_NOUNS: &[&str] = &[
-    "catch", "catches", "caught", "block", "blocks", "blocked", "false-open", "false open",
-    "false-block", "false block", "hallucination", "wire-dark", "detection", "attacks",
-    "insecure", "residual", "speedup", "faster", "fewer", "reduction",
+    "catch",
+    "catches",
+    "caught",
+    "block",
+    "blocks",
+    "blocked",
+    "false-open",
+    "false open",
+    "false-block",
+    "false block",
+    "hallucination",
+    "wire-dark",
+    "detection",
+    "attacks",
+    "insecure",
+    "residual",
+    "speedup",
+    "faster",
+    "fewer",
+    "reduction",
 ];
 
 fn has_number(lower: &str) -> bool {
@@ -167,10 +209,18 @@ fn looks_like_rate_claim(text: &str) -> bool {
         return true;
     }
     // Word-boundary match for "rate" so Strategy/Generated/operate do not trip the lint.
-    let has_rate_word = lower.split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_').any(|w| {
-        w == "rate" || w.ends_with("-rate") || w.starts_with("rate-") || w.contains("catch-rate")
-            || w == "catch_rate" || w == "false_block_rate" || w.ends_with("_rate")
-    }) || lower.contains("catch-rate")
+    let has_rate_word = lower
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        .any(|w| {
+            w == "rate"
+                || w.ends_with("-rate")
+                || w.starts_with("rate-")
+                || w.contains("catch-rate")
+                || w == "catch_rate"
+                || w == "false_block_rate"
+                || w.ends_with("_rate")
+        })
+        || lower.contains("catch-rate")
         || lower.contains("false-block")
         || lower.contains("false_block");
     // strong rate/percent context: any number is a claim
@@ -183,15 +233,34 @@ fn looks_like_rate_claim(text: &str) -> bool {
     }
     // weaker context (a metric noun, a multiplier): require a CLAIM-shaped number so a
     // list ordinal ("5.") or a spec table cell ("| 2 |") does not trip the lint.
-    let weak_context =
-        METRIC_NOUNS.iter().any(|m| lower.contains(m)) || has_multiplier(&lower);
+    let weak_context = has_metric_noun(&lower) || has_multiplier(&lower);
     weak_context && claimish_number(&lower)
+}
+
+fn has_metric_noun(lower: &str) -> bool {
+    lower
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        .any(|word| METRIC_NOUNS.contains(&word))
+        || ["false open", "false block"]
+            .iter()
+            .any(|phrase| lower.contains(phrase))
 }
 
 /// A digit immediately followed by 'x' ("3x", "2.45x") — a multiplier claim. NOT any 'x'.
 fn has_multiplier(lower: &str) -> bool {
     let bytes = lower.as_bytes();
-    bytes.windows(2).any(|w| w[0].is_ascii_digit() && w[1] == b'x')
+    bytes.windows(2).enumerate().any(|(index, pair)| {
+        if !pair[0].is_ascii_digit() || pair[1] != b'x' {
+            return false;
+        }
+        let mut start = index;
+        while start > 0 && (bytes[start - 1].is_ascii_digit() || bytes[start - 1] == b'.') {
+            start -= 1;
+        }
+        let begins_number = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
+        let ends_number = index + 2 == bytes.len() || !bytes[index + 2].is_ascii_alphanumeric();
+        begins_number && ends_number
+    })
 }
 
 /// A number shaped like a quantitative claim: a decimal (0.97), a percent (99%), a
@@ -220,9 +289,8 @@ fn claimish_number(lower: &str) -> bool {
 /// N/M with digits on both sides (e.g. "44/551").
 fn regex_ratio(lower: &str) -> bool {
     let b = lower.as_bytes();
-    b.windows(3).any(|w| {
-        w[0].is_ascii_digit() && w[1] == b'/' && w[2].is_ascii_digit()
-    })
+    b.windows(3)
+        .any(|w| w[0].is_ascii_digit() && w[1] == b'/' && w[2].is_ascii_digit())
 }
 
 /// A claim is tagged when it carries [MEASURED...] or [EXTERNAL...]; the honest-wording
@@ -269,8 +337,36 @@ mod tests {
             "That is intentional for TRUST-INTEGRITY (plan layer-two list).",
             "catch rate 1.0 at false-block 0 [MEASURED, signed bundle]",
             "See the roadmap for phase-one work.",
+            "burntsushi__ripgrep-2576__zpqr8XR",
+            "crack-7z-hash__hegne7x",
+            "release blocker v0.1.0",
         ] {
             assert!(!line_has_untagged_rate_claim(s), "should NOT flag: {s}");
         }
+    }
+
+    #[test]
+    fn skips_dependency_and_build_trees_but_lints_project_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let ignored = temp.path().join("bench/harbor/.venv/pkg");
+        let tracked = temp.path().join("docs");
+        std::fs::create_dir_all(&ignored).expect("ignored dir");
+        std::fs::create_dir_all(&tracked).expect("tracked dir");
+        std::fs::write(ignored.join("README.md"), "catch rate 99%").expect("ignored claim");
+        std::fs::write(tracked.join("claim.md"), "catch rate 98%").expect("tracked claim");
+        let generated = temp.path().join("bench/harbor/runs/run-1");
+        std::fs::create_dir_all(&generated).expect("generated dir");
+        std::fs::write(
+            generated.join("trajectory.json"),
+            r#"{"note":"catch rate 97%"}"#,
+        )
+        .expect("generated claim");
+        let internal = temp.path().join("docs-internal");
+        std::fs::create_dir_all(&internal).expect("internal dir");
+        std::fs::write(internal.join("session.md"), "catch rate 96%").expect("internal claim");
+
+        let findings = claims_lint(temp.path()).expect("lint");
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].path.ends_with("docs/claim.md"));
     }
 }

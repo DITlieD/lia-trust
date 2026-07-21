@@ -9,14 +9,14 @@
 
 | Lane | Score | Evidence |
 |------|-------|----------|
-| Arm B counterfactual catch | **1.0** | `three-arm-post-fix/arm_b_summary.json` |
-| Arm B false_block | **0.0** | same |
-| Arm C live catch | **1.0** (n_adv=81 incl destructive_shell 9/9) | `lia-trust-v0-three-arm.json` |
-| Arm C false_block | **0.0** | same |
-| Arm C residual | **0.0** | same |
+| Arm B counterfactual catch [MEASURED] | **1.0** | `three-arm-post-fix/arm_b_summary.json` |
+| Arm B false_block [MEASURED] | **0.0** | same |
+| Arm C live catch [MEASURED] | **1.0** (n_adv=81 incl destructive_shell 9/9) | `lia-trust-v0-three-arm.json` |
+| Arm C false_block [MEASURED] | **0.0** | same |
+| Arm C residual [MEASURED] | **0.0** | same |
 | Arm C verify_ok | **true** | same |
 | secret_leak / journal_tamper | **9/9** | Arm B/C by_class |
-| destructive_shell Arm B | **10/10** | arm_b + residual false_open closed |
+| destructive_shell Arm B [MEASURED] | **10/10** | arm_b + residual false_open closed |
 | Gate fixtures | **26/26** | `bench/run_gate_fixtures.sh` |
 | Unit tests lia-gates | **22 passed** | cargo test |
 | TB2 ON subset n=6 | OOS=**0**, token_ratio≈**1.26**, destructive still **1**, mean=**0.667** | `tb2-on-post-fix-subset6.json` |
@@ -51,7 +51,7 @@ Legend: **DONE** = success metric met with code/tests/evidence; **DONE-DOC** = s
 | P1-1 | **DONE** | curl\|bash, kill -9 -1 (PID only), shutdown; Arm B destructive 10/10 |
 | P1-2 | **DONE** | sk-proj DENY; secret 9/9 |
 | P1-3 | **DONE** | journal adv01 broken prev_hash; 9/9 |
-| P1-4 | **DONE** | Arm C `destructive_shell` n=9 catch=9 false_block=0 |
+| P1-4 | **DONE [MEASURED]** | Arm C `destructive_shell` n=9 catch=9 false_block=0 |
 | P1-5 | **DONE** | ≥20 destructive fixtures DENY unit pack |
 | P1-10 | **DONE** | honesty: ground/syco trust-corpus-only + Terminus shell-only cell |
 | P1-11 | **DONE** | `admit_write_with_ast` + unit (AST_EVAL) + CLI ast-gate |
@@ -116,7 +116,7 @@ DND1–DND8 honored: no fail-open on irreversibles; no pooled headlines; shell g
 | sk-proj- | secret regexes |
 | journal adv01 | break prev_hash in fixture/trajectory |
 
-Arm B catch **1.0**, Arm C **1.0** (pre-class-expansion) with false_block **0**, verify_ok.
+Arm B catch **1.0**, Arm C **1.0** (pre-class-expansion) with false_block **0**, verify_ok [MEASURED].
 
 ### What still is not “full Harbor marketing”
 

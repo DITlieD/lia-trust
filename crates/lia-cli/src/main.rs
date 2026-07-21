@@ -23,7 +23,10 @@ use lia_ground::{
     ground_result_to_outcome, load_claim, load_context, parse_claim, verify_claim,
     verify_claim_with_id, GroundContext, GROUND_GATE_ID,
 };
-use lia_journal::{append_signed, verify_chain, Journal, SigningIdentity};
+use lia_journal::{
+    append_signed, rotate_journal_if_needed, verify_chain, verify_chain_immutable,
+    verify_signed_shareable_anchors, Journal, SignedShareableAnchors, SigningIdentity,
+};
 use lia_policy::{evaluate_frozen, freeze_policy_from_path, load_evidence_json, EvidenceSet};
 use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
@@ -58,7 +61,52 @@ enum Commands {
         run_id: Option<Uuid>,
     },
     #[command(name = "journal-verify")]
-    JournalVerify { db: PathBuf },
+    JournalVerify {
+        db: PathBuf,
+        /// Treat DB as a stable offline archive/copy; refuses WAL/SHM/rollback sidecars.
+        #[arg(long)]
+        immutable: bool,
+    },
+    #[command(name = "journal-anchors")]
+    JournalAnchors {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long, default_value_t = 2)]
+        head: usize,
+        #[arg(long, default_value_t = 2)]
+        tail: usize,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    #[command(name = "journal-anchors-verify")]
+    JournalAnchorsVerify {
+        manifest: PathBuf,
+        #[arg(long)]
+        expected_public_key_hex: String,
+    },
+    #[command(name = "journal-maintain")]
+    JournalMaintain {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        archive_dir: PathBuf,
+        #[arg(long, default_value_t = 100_000)]
+        max_rows: u64,
+        #[arg(long, default_value_t = 268_435_456)]
+        max_bytes: u64,
+        #[arg(long, default_value_t = 86_400)]
+        max_age_seconds: u64,
+        #[arg(long)]
+        secret_key_hex: String,
+        #[arg(long, default_value = "lia-default")]
+        key_id: String,
+        #[arg(long)]
+        run_id: Option<Uuid>,
+    },
     Gate {
         #[arg(long)]
         rules: Option<PathBuf>,
@@ -210,6 +258,8 @@ enum Commands {
         watch: bool,
         #[arg(long)]
         no_watch: bool,
+        #[arg(long, default_value_t = 900)]
+        timeout_seconds: u64,
         #[arg(last = true)]
         agent: Vec<String>,
     },
@@ -413,8 +463,59 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Commands::JournalVerify { db } => {
-            verify_chain(&db)?;
+        Commands::JournalVerify { db, immutable } => {
+            if immutable {
+                verify_chain_immutable(&db)?;
+            } else {
+                verify_chain(&db)?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Commands::JournalAnchors {
+            db,
+            head,
+            tail,
+            secret_key_hex,
+            key_id,
+            out,
+        } => {
+            let journal = Journal::open_readonly(&db)?;
+            let identity = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+            let manifest = journal.signed_shareable_anchors(head, tail, &identity)?;
+            let bytes = serde_json::to_vec_pretty(&manifest)?;
+            fs::write(out, &bytes)?;
+            println!("{}", serde_json::to_string(&manifest)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Commands::JournalAnchorsVerify {
+            manifest,
+            expected_public_key_hex,
+        } => {
+            let parsed: SignedShareableAnchors = serde_json::from_slice(&fs::read(manifest)?)?;
+            verify_signed_shareable_anchors(&parsed, Some(&expected_public_key_hex))?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Commands::JournalMaintain {
+            db,
+            archive_dir,
+            max_rows,
+            max_bytes,
+            max_age_seconds,
+            secret_key_hex,
+            key_id,
+            run_id,
+        } => {
+            let identity = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+            let report = rotate_journal_if_needed(
+                db,
+                archive_dir,
+                max_rows,
+                max_bytes,
+                max_age_seconds,
+                run_id.unwrap_or_else(Uuid::new_v4),
+                &identity,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(ExitCode::SUCCESS)
         }
         Commands::Gate {
@@ -628,6 +729,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             run_id,
             watch,
             no_watch,
+            timeout_seconds,
             agent,
         } => run_wrap(
             repo,
@@ -637,6 +739,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
             watch && !no_watch,
+            timeout_seconds,
             agent,
         ),
         Commands::Report {
@@ -1142,6 +1245,7 @@ fn run_wrap(
     key_id: String,
     run_id: Option<Uuid>,
     watch: bool,
+    timeout_seconds: u64,
     agent: Vec<String>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cfg = load_gate_config(&config)?;
@@ -1155,6 +1259,7 @@ fn run_wrap(
         key_id,
         env_allowlist: None,
         watch,
+        timeout_seconds,
         agent_argv: agent,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
@@ -1466,7 +1571,7 @@ fn run_bench(
     model: Option<String>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let harness = Harness::parse(&harness)?;
-    let arm = Arm::parse(&arm).map_err(|e| e)?;
+    let arm = Arm::parse(&arm)?;
     if force_recorded && require_live {
         return Err("cannot combine --force-recorded with --require-live".into());
     }

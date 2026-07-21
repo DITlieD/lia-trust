@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use lia_gates::GateConfig;
@@ -39,6 +39,10 @@ const DEFAULT_ENV_ALLOWLIST: &[&str] = &[
     "XDG_RUNTIME_DIR",
 ];
 
+fn default_timeout_seconds() -> u64 {
+    900
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WrapOptions {
     pub repo: PathBuf,
@@ -51,6 +55,8 @@ pub struct WrapOptions {
     pub env_allowlist: Option<Vec<String>>,
     #[serde(default)]
     pub watch: bool,
+    #[serde(default = "default_timeout_seconds")]
+    pub timeout_seconds: u64,
     pub agent_argv: Vec<String>,
 }
 
@@ -60,6 +66,8 @@ pub struct WrapReport {
     pub worktree: PathBuf,
     pub journal_path: PathBuf,
     pub agent_exit: i32,
+    pub timed_out: bool,
+    pub reason_code: String,
     pub detect_events: Vec<DetectEvent>,
     pub final_diff_sha256: Option<String>,
     pub mediation: String,
@@ -127,7 +135,8 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
 
     let stop = Arc::new(AtomicBool::new(false));
     let detect_log = opts.evidence_dir.join("detect_events.jsonl");
-    let watcher = if opts.watch {
+    let mut watcher = if opts.watch {
+        fs::File::create(&detect_log).map_err(|error| AdapterError::Invalid(error.to_string()))?;
         let stop_c = Arc::clone(&stop);
         let root = worktree.clone();
         let log_path = detect_log.clone();
@@ -157,16 +166,61 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let status_result = cmd.status();
+    let status_result = match cmd.spawn() {
+        Ok(mut child) => {
+            let timeout = Duration::from_secs(opts.timeout_seconds);
+            let started = Instant::now();
+            loop {
+                if watcher.as_ref().is_some_and(|handle| handle.is_finished()) {
+                    let (status, cleanup_error) = terminate_and_reap(&mut child);
+                    let detail = cleanup_error.unwrap_or_else(|| {
+                        "detect watcher stopped before the wrapped child exited".into()
+                    });
+                    break Ok((
+                        status,
+                        false,
+                        Some(("GENERIC_OBSERVATION_INCOMPLETE", detail)),
+                    ));
+                }
+                match child.try_wait() {
+                    Ok(Some(status)) => break Ok((Some(status), false, None)),
+                    Ok(None) if started.elapsed() >= timeout => {
+                        let (status, cleanup_error) = terminate_and_reap(&mut child);
+                        let failure =
+                            cleanup_error.map(|detail| ("GENERIC_AGENT_CLEANUP_FAILED", detail));
+                        break Ok((status, true, failure));
+                    }
+                    Ok(None) => thread::sleep(Duration::from_millis(10)),
+                    Err(error) => {
+                        let (status, cleanup_error) = terminate_and_reap(&mut child);
+                        let mut detail = format!("child status check failed: {error}");
+                        if let Some(cleanup_error) = cleanup_error {
+                            detail.push_str(&format!("; cleanup failed: {cleanup_error}"));
+                        }
+                        break Ok((
+                            status,
+                            false,
+                            Some(("GENERIC_AGENT_CLEANUP_FAILED", detail)),
+                        ));
+                    }
+                }
+            }
+        }
+        Err(error) => Err(error),
+    };
 
     stop.store(true, Ordering::SeqCst);
-    if let Some(handle) = watcher {
-        handle
-            .join()
-            .map_err(|_| AdapterError::Invalid("detect watcher panicked".into()))?;
-    }
-    let status = match status_result {
-        Ok(status) => status,
+    let watcher_failure = if let Some(handle) = watcher.take() {
+        match handle.join() {
+            Ok(Ok(())) => None,
+            Ok(Err(error)) => Some(error.to_string()),
+            Err(_) => Some("detect watcher panicked".into()),
+        }
+    } else {
+        None
+    };
+    let (status, timed_out, execution_failure) = match status_result {
+        Ok(result) => result,
         Err(error) => {
             append_signed(
                 &journal,
@@ -187,7 +241,68 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
             )));
         }
     };
-    let agent_exit = status.code().unwrap_or(1);
+    let observation_failure = watcher_failure.filter(|_| {
+        !matches!(
+            execution_failure.as_ref(),
+            Some((reason_code, _)) if *reason_code == "GENERIC_OBSERVATION_INCOMPLETE"
+        )
+    });
+    let agent_exit = if timed_out {
+        append_signed(
+            &journal,
+            opts.run_id,
+            Event::RawHarness(RawHarnessEvent {
+                harness: "generic".into(),
+                raw: serde_json::json!({
+                    "action_id": action_id,
+                    "reason_code": "GENERIC_AGENT_TIMEOUT",
+                    "timeout_seconds": opts.timeout_seconds,
+                }),
+                timestamp: Utc::now(),
+            }),
+            &identity,
+        )?;
+        124
+    } else {
+        status.as_ref().and_then(ExitStatus::code).unwrap_or(1)
+    };
+    let reason_code = if timed_out {
+        "GENERIC_AGENT_TIMEOUT"
+    } else {
+        "GENERIC_AGENT_EXITED"
+    };
+    if let Some((reason_code, detail)) = &execution_failure {
+        append_signed(
+            &journal,
+            opts.run_id,
+            Event::RawHarness(RawHarnessEvent {
+                harness: "generic".into(),
+                raw: serde_json::json!({
+                    "action_id": action_id,
+                    "reason_code": reason_code,
+                    "detail": detail,
+                }),
+                timestamp: Utc::now(),
+            }),
+            &identity,
+        )?;
+    }
+    if let Some(detail) = &observation_failure {
+        append_signed(
+            &journal,
+            opts.run_id,
+            Event::RawHarness(RawHarnessEvent {
+                harness: "generic".into(),
+                raw: serde_json::json!({
+                    "action_id": action_id,
+                    "reason_code": "GENERIC_OBSERVATION_INCOMPLETE",
+                    "detail": detail,
+                }),
+                timestamp: Utc::now(),
+            }),
+            &identity,
+        )?;
+    }
     append_signed(
         &journal,
         opts.run_id,
@@ -203,7 +318,20 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         &identity,
     )?;
 
-    let detect_events = read_detect_events(&detect_log);
+    if let Some((reason_code, detail)) = execution_failure {
+        return Err(AdapterError::Invalid(format!(
+            "{reason_code}: {detail}; evidence journal={}",
+            journal_path.display()
+        )));
+    }
+    if let Some(detail) = observation_failure {
+        return Err(AdapterError::Invalid(format!(
+            "GENERIC_OBSERVATION_INCOMPLETE: {detail}; evidence journal={}",
+            journal_path.display()
+        )));
+    }
+
+    let detect_events = read_detect_events(&detect_log, opts.watch)?;
     let final_diff_sha256 = compute_worktree_diff_sha(&repo_canon, &worktree)?;
     append_signed(
         &journal,
@@ -224,6 +352,8 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         worktree,
         journal_path,
         agent_exit,
+        timed_out,
+        reason_code: reason_code.into(),
         detect_events,
         final_diff_sha256: Some(final_diff_sha256),
         mediation: "mediation: incomplete — an out-of-band process can bypass LIA on this harness; native ELAI's process-isolation closes this".into(),
@@ -287,39 +417,116 @@ fn filter_env(allowlist: &[String]) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn watch_detect_only(root: PathBuf, log_path: PathBuf, stop: Arc<AtomicBool>) {
-    let mut baseline = snapshot_paths(&root);
-    while !stop.load(Ordering::SeqCst) {
-        thread::sleep(Duration::from_millis(200));
-        let now = snapshot_paths(&root);
-        for p in now.difference(&baseline) {
-            let _ = append_detect(&log_path, p, "created_or_modified");
+#[derive(Default)]
+struct CleanupErrorSummary {
+    count: u64,
+    first: Option<String>,
+    last: Option<String>,
+}
+
+impl CleanupErrorSummary {
+    fn record(&mut self, message: String) {
+        self.count = self.count.saturating_add(1);
+        if self.first.is_none() {
+            self.first = Some(message.clone());
         }
-        for p in baseline.difference(&now) {
-            let _ = append_detect(&log_path, p, "deleted");
+        self.last = Some(message);
+    }
+
+    fn render(&self) -> Option<String> {
+        let first = self.first.as_deref()?;
+        if self.count == 1 {
+            return Some(first.to_owned());
         }
-        baseline = now;
+        Some(format!(
+            "cleanup errors={} first={first}; last={}",
+            self.count,
+            self.last.as_deref().unwrap_or(first)
+        ))
     }
 }
 
-fn snapshot_paths(root: &Path) -> BTreeSet<String> {
+fn terminate_and_reap(child: &mut std::process::Child) -> (Option<ExitStatus>, Option<String>) {
+    let mut cleanup_errors = CleanupErrorSummary::default();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return (Some(status), cleanup_errors.render()),
+            Ok(None) => {}
+            Err(error) => cleanup_errors.record(format!("status check failed: {error}")),
+        }
+        match child.kill() {
+            Ok(()) => break,
+            Err(error) => {
+                cleanup_errors.record(format!("kill failed: {error}"));
+                // Never release a child that may still be executing. A kernel-level refusal to
+                // terminate is fail-stop: keep observation alive and retry instead of returning.
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+    loop {
+        match child.wait() {
+            Ok(status) => return (Some(status), cleanup_errors.render()),
+            Err(error) => {
+                cleanup_errors.record(format!("reap failed: {error}"));
+                match child.try_wait() {
+                    Ok(Some(status)) => return (Some(status), cleanup_errors.render()),
+                    Ok(None) | Err(_) => thread::sleep(Duration::from_millis(10)),
+                }
+            }
+        }
+    }
+}
+
+fn watch_detect_only(
+    root: PathBuf,
+    log_path: PathBuf,
+    stop: Arc<AtomicBool>,
+) -> Result<(), AdapterError> {
+    let mut baseline = snapshot_paths(&root)?;
+    loop {
+        thread::sleep(Duration::from_millis(200));
+        let now = snapshot_paths(&root)?;
+        for p in now.difference(&baseline) {
+            append_detect(&log_path, p, "created_or_modified")?;
+        }
+        for p in baseline.difference(&now) {
+            append_detect(&log_path, p, "deleted")?;
+        }
+        baseline = now;
+        if stop.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+    }
+}
+
+fn snapshot_paths(root: &Path) -> Result<BTreeSet<String>, AdapterError> {
     let mut out = BTreeSet::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let entries = match fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for entry in entries.flatten() {
+        let entries = fs::read_dir(&dir).map_err(|error| {
+            AdapterError::Invalid(format!(
+                "snapshot read failed at {}: {error}",
+                dir.display()
+            ))
+        })?;
+        for entry in entries {
+            let entry = entry.map_err(|error| AdapterError::Invalid(error.to_string()))?;
             let path = entry.path();
-            if path.is_dir() {
+            let file_type = entry
+                .file_type()
+                .map_err(|error| AdapterError::Invalid(error.to_string()))?;
+            if file_type.is_dir() {
                 stack.push(path);
-            } else if let Ok(rel) = path.strip_prefix(root) {
+            } else if file_type.is_file() {
+                let rel = path.strip_prefix(root).map_err(|error| {
+                    AdapterError::Invalid(format!("snapshot path escaped root: {error}"))
+                })?;
                 out.insert(rel.to_string_lossy().to_string());
             }
         }
     }
-    out
+    Ok(out)
 }
 
 fn append_detect(log_path: &Path, path: &str, kind: &str) -> Result<(), AdapterError> {
@@ -330,28 +537,33 @@ fn append_detect(log_path: &Path, path: &str, kind: &str) -> Result<(), AdapterE
         .map_err(|e| AdapterError::Invalid(e.to_string()))?;
     let line = serde_json::json!({"path": path, "kind": kind});
     writeln!(f, "{line}").map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    f.sync_data()
+        .map_err(|error| AdapterError::Invalid(error.to_string()))?;
     Ok(())
 }
 
-fn read_detect_events(path: &Path) -> Vec<DetectEvent> {
+fn read_detect_events(path: &Path, required: bool) -> Result<Vec<DetectEvent>, AdapterError> {
     let mut out = Vec::new();
-    let Ok(mut f) = fs::File::open(path) else {
-        return out;
+    let mut f = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+        Err(error) => return Err(AdapterError::Invalid(error.to_string())),
     };
     let mut buf = String::new();
-    let _ = f.read_to_string(&mut buf);
+    f.read_to_string(&mut buf)
+        .map_err(|error| AdapterError::Invalid(error.to_string()))?;
     for line in buf.lines() {
-        if let Ok(ev) = serde_json::from_str::<DetectEvent>(line) {
-            out.push(ev);
-        }
+        let event = serde_json::from_str::<DetectEvent>(line)
+            .map_err(|error| AdapterError::Invalid(error.to_string()))?;
+        out.push(event);
     }
-    out
+    Ok(out)
 }
 
 fn compute_worktree_diff_sha(repo: &Path, worktree: &Path) -> Result<String, AdapterError> {
     let mut hasher = Sha256::new();
-    let paths = snapshot_paths(worktree);
-    let base = snapshot_paths(repo);
+    let paths = snapshot_paths(worktree)?;
+    let base = snapshot_paths(repo)?;
     for p in paths.union(&base) {
         hasher.update(p.as_bytes());
         let a = worktree.join(p);

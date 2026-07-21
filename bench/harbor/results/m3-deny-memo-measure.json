@@ -1,0 +1,16 @@
+{
+  "classification": "LOCAL_MICROBENCHMARK_NOT_HARBOR_UTILITY",
+  "correctness": {
+    "allow_cache": false,
+    "changed_context_miss": true,
+    "full_harbor_rerun": false,
+    "verified_denial_only": true
+  },
+  "gate_path": "lia gate + lia journal-verify + receipt-head validation",
+  "gate_tcb_latency_ms": 25.357,
+  "memo_hit_mean_us": 0.395,
+  "memo_hits": 10000,
+  "memo_samples": 10000,
+  "observed_speedup_ratio": 64133.903,
+  "schema": "lia-m3-deny-memo-measure-v1"
+}

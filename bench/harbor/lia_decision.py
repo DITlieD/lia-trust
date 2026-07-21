@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
+from collections import Counter, OrderedDict, deque
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,82 @@ ALLOW_VERDICTS = frozenset({"allow", "verified"})
 BLOCKING_VERDICTS = frozenset(
     {"deny", "refuted", "quarantine", "unsupported", "incomplete"}
 )
+
+
+class DenyMemo:
+    """Small, TTL-bound cache that can only retain fail-closed decisions."""
+
+    def __init__(self, ttl_seconds: float = 30.0, max_entries: int = 256) -> None:
+        self._ttl_seconds = max(0.0, float(ttl_seconds))
+        self._max_entries = max(1, int(max_entries))
+        self._entries: OrderedDict[tuple[str, str], tuple[float, dict[str, Any]]] = (
+            OrderedDict()
+        )
+
+    def _purge_expired(self, now: float) -> None:
+        expired = [key for key, (deadline, _) in self._entries.items() if deadline <= now]
+        for key in expired:
+            self._entries.pop(key, None)
+
+    def get(self, command: str, context: str) -> dict[str, Any] | None:
+        now = time.monotonic()
+        self._purge_expired(now)
+        key = (command, context)
+        found = self._entries.get(key)
+        if found is None:
+            return None
+        _, decision = found
+        self._entries.move_to_end(key)
+        return dict(decision)
+
+    def put(self, command: str, context: str, decision: dict[str, Any]) -> None:
+        if decision.get("deny") is not True or self._ttl_seconds <= 0:
+            return
+        now = time.monotonic()
+        self._purge_expired(now)
+        key = (command, context)
+        self._entries[key] = (now + self._ttl_seconds, dict(decision))
+        self._entries.move_to_end(key)
+        while len(self._entries) > self._max_entries:
+            self._entries.popitem(last=False)
+
+    def __len__(self) -> int:
+        self._purge_expired(time.monotonic())
+        return len(self._entries)
+
+
+class GateMetrics:
+    """Bounded in-memory latency samples plus monotonic decision counters."""
+
+    def __init__(self, max_samples: int = 256) -> None:
+        self._latency_ms: deque[float] = deque(maxlen=max(1, int(max_samples)))
+        self._reason_counts: Counter[str] = Counter()
+        self._gate_spawns = 0
+        self._memo_hits = 0
+        self._timeout_count = 0
+
+    def record_spawn(self, latency_ms: float, reason_code: str) -> None:
+        reason = reason_code or "LIA_GATE_UNKNOWN"
+        self._gate_spawns += 1
+        self._latency_ms.append(max(0.0, float(latency_ms)))
+        self._reason_counts[reason] += 1
+        if "TIMEOUT" in reason:
+            self._timeout_count += 1
+
+    def record_memo_hit(self) -> None:
+        self._memo_hits += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        sample_count = len(self._latency_ms)
+        mean = sum(self._latency_ms) / sample_count if sample_count else 0.0
+        return {
+            "gate_spawns": self._gate_spawns,
+            "memo_hits": self._memo_hits,
+            "latency_sample_count": sample_count,
+            "mean_gate_latency_ms": round(mean, 3),
+            "timeout_count": self._timeout_count,
+            "reason_counts": dict(sorted(self._reason_counts.items())),
+        }
 
 
 def fail_closed(reason_code: str, detail: str) -> dict[str, Any]:

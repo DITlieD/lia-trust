@@ -3,8 +3,11 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bench.harbor.lia_decision import (
+    DenyMemo,
+    GateMetrics,
     fail_closed,
     journal_verification_decision,
     parse_gate_response,
@@ -104,6 +107,34 @@ class LiaDecisionTests(unittest.TestCase):
             mismatch = validate_receipt_head(stale, db)
             self.assertTrue(mismatch["deny"])
             self.assertEqual(mismatch["reason_code"], "LIA_RECEIPT_HEAD_MISMATCH")
+
+    def test_deny_memo_is_ttl_context_bound_and_never_caches_allow(self) -> None:
+        memo = DenyMemo(ttl_seconds=5.0, max_entries=2)
+        denied = {"deny": True, "reason_code": "SHELL_DESTRUCTIVE"}
+        allowed = {"deny": False, "reason_code": "SHELL_ALLOW"}
+        with patch("bench.harbor.lia_decision.time.monotonic", return_value=10.0):
+            memo.put("rm -rf /", "ctx-a", denied)
+            memo.put("echo ok", "ctx-a", allowed)
+            self.assertEqual(memo.get("rm -rf /", "ctx-a"), denied)
+            self.assertIsNone(memo.get("echo ok", "ctx-a"))
+            self.assertIsNone(memo.get("rm -rf /", "ctx-b"))
+        with patch("bench.harbor.lia_decision.time.monotonic", return_value=16.0):
+            self.assertIsNone(memo.get("rm -rf /", "ctx-a"))
+
+    def test_gate_metrics_are_bounded_and_machine_readable(self) -> None:
+        metrics = GateMetrics(max_samples=3)
+        metrics.record_spawn(10.0, "SHELL_ALLOW")
+        metrics.record_spawn(20.0, "SHELL_DESTRUCTIVE")
+        metrics.record_spawn(30.0, "LIA_GATE_TIMEOUT")
+        metrics.record_spawn(40.0, "SHELL_OUT_OF_SCOPE")
+        metrics.record_memo_hit()
+        snapshot = metrics.snapshot()
+        self.assertEqual(snapshot["gate_spawns"], 4)
+        self.assertEqual(snapshot["memo_hits"], 1)
+        self.assertEqual(snapshot["latency_sample_count"], 3)
+        self.assertEqual(snapshot["timeout_count"], 1)
+        self.assertEqual(snapshot["reason_counts"]["SHELL_DESTRUCTIVE"], 1)
+        self.assertEqual(snapshot["mean_gate_latency_ms"], 30.0)
 
 
 if __name__ == "__main__":

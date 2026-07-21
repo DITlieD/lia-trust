@@ -81,7 +81,9 @@ pub fn parse_pre_tool_use(raw: &str) -> Result<PreToolUseInput, AdapterError> {
     })
 }
 
-pub fn map_tool_to_action(input: &PreToolUseInput) -> Result<(ActionKind, GatePayload), AdapterError> {
+pub fn map_tool_to_action(
+    input: &PreToolUseInput,
+) -> Result<(ActionKind, GatePayload), AdapterError> {
     let ti = &input.tool_input;
     match input.tool_name.as_str() {
         CC_TOOL_BASH => {
@@ -141,13 +143,16 @@ pub fn map_tool_to_action(input: &PreToolUseInput) -> Result<(ActionKind, GatePa
                 .and_then(|x| x.as_str())
                 .ok_or_else(|| AdapterError::Invalid("MultiEdit missing file_path".into()))?
                 .to_string();
-            let text = ti.get(CC_INPUT_EDITS).and_then(|e| e.as_array()).map(|edits| {
-                edits
-                    .iter()
-                    .filter_map(|edit| edit.get("new_string").and_then(|x| x.as_str()))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            });
+            let text = ti
+                .get(CC_INPUT_EDITS)
+                .and_then(|e| e.as_array())
+                .map(|edits| {
+                    edits
+                        .iter()
+                        .filter_map(|edit| edit.get("new_string").and_then(|x| x.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                });
             Ok((
                 ActionKind::WriteFile,
                 GatePayload {
@@ -237,7 +242,10 @@ fn is_fabricated_pass_claim(command: &str) -> bool {
     c.contains("lia-fabricate-pass") || c.contains("claimed_pass=true")
 }
 
-pub fn on_pre_tool(raw_stdin: &str, ctx: &RunContext) -> Result<(HookDecision, Value), AdapterError> {
+pub fn on_pre_tool(
+    raw_stdin: &str,
+    ctx: &RunContext,
+) -> Result<(HookDecision, Value), AdapterError> {
     let input = parse_pre_tool_use(raw_stdin)?;
     if !input.hook_event_name.is_empty() && input.hook_event_name != CC_HOOK_EVENT_PRE_TOOL_USE {
         return Err(AdapterError::Invalid(format!(
@@ -260,10 +268,7 @@ pub fn on_pre_tool(raw_stdin: &str, ctx: &RunContext) -> Result<(HookDecision, V
     let action_id = Uuid::new_v4();
     let result = dispatch_action(kind, action_id, payload, ctx).map_err(AdapterError::from)?;
     let (permission_decision, permission_decision_reason) = if result.allowed {
-        (
-            CC_DECISION_ALLOW.to_string(),
-            "lia gates allow".to_string(),
-        )
+        (CC_DECISION_ALLOW.to_string(), "lia gates allow".to_string())
     } else {
         (
             CC_DECISION_DENY.to_string(),
@@ -291,5 +296,5 @@ pub fn decision_json(decision: &HookDecision) -> Value {
 
 pub fn handle_pre_tool_stdin(raw: &str, ctx: &RunContext) -> Result<String, AdapterError> {
     let (_decision, value) = on_pre_tool(raw, ctx)?;
-    Ok(serde_json::to_string(&value).map_err(|e| AdapterError::Invalid(e.to_string()))?)
+    serde_json::to_string(&value).map_err(|e| AdapterError::Invalid(e.to_string()))
 }

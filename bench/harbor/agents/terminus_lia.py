@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sqlite3
 import subprocess
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -15,6 +17,8 @@ from .common import lia_bin
 
 try:
     from bench.harbor.lia_decision import (
+        DenyMemo,
+        GateMetrics,
         fail_closed,
         journal_verification_decision,
         parse_gate_response,
@@ -24,6 +28,8 @@ except ModuleNotFoundError as error:
     if error.name not in {"bench", "bench.harbor"}:
         raise
     from lia_decision import (  # type: ignore[no-redef]
+        DenyMemo,
+        GateMetrics,
         fail_closed,
         journal_verification_decision,
         parse_gate_response,
@@ -69,11 +75,22 @@ class TerminusLia(Terminus2):
         self._durable_journal: Path | None = None
         # P2-5: deny-only memo. Allows are always re-evaluated and rebound to the
         # current verified journal head; a cached allow can never outlive the TCB.
-        self._decision_memo: dict[str, dict] = {}
-        self._memo_hits = 0
-        self._gate_spawns = 0
+        try:
+            memo_ttl = float(os.environ.get("LIA_DENY_MEMO_TTL_SECONDS", "30"))
+        except ValueError:
+            memo_ttl = 30.0
+        try:
+            memo_max = int(os.environ.get("LIA_DENY_MEMO_MAX_ENTRIES", "256"))
+        except ValueError:
+            memo_max = 256
+        self._decision_memo = DenyMemo(memo_ttl, memo_max)
+        self._gate_metrics = GateMetrics()
         self._signing_secret_hex = secrets.token_hex(32)
         self._init_durable_journal()
+        self._journal_epoch_started = time.monotonic()
+        self._journal_preexisting = bool(
+            self._durable_journal and self._durable_journal.is_file()
+        )
 
     @staticmethod
     def name() -> str:
@@ -156,6 +173,111 @@ class TerminusLia(Terminus2):
         except ValueError:
             return DEFAULT_DENY_CAP
 
+    @staticmethod
+    def _positive_int_env(name: str, default: int) -> int:
+        try:
+            return max(1, int(os.environ.get(name, str(default))))
+        except ValueError:
+            return default
+
+    def _maintain_journal_if_due(self, binary: Path, timeout_seconds: float) -> dict | None:
+        """Rotate only at a bounded row/byte/age threshold; any lifecycle error denies."""
+        journal = self._durable_journal
+        if journal is None:
+            return fail_closed("LIA_JOURNAL_UNAVAILABLE", "no durable journal path")
+
+        max_rows = self._positive_int_env("LIA_JOURNAL_MAX_ROWS", 100_000)
+        max_bytes = self._positive_int_env("LIA_JOURNAL_MAX_BYTES", 268_435_456)
+        max_age = self._positive_int_env("LIA_JOURNAL_MAX_AGE_SECONDS", 86_400)
+        state = journal.with_suffix(".rotation.json")
+        try:
+            orphaned = list(journal.parent.glob(f"{journal.stem}.rotate-*.tmp"))
+        except OSError as error:
+            return fail_closed("LIA_JOURNAL_LIFECYCLE_UNAVAILABLE", str(error))
+        if journal.exists():
+            try:
+                measured_bytes = journal.stat().st_size
+                wal = Path(f"{journal}-wal")
+                if wal.exists():
+                    measured_bytes += wal.stat().st_size
+                uri = journal.resolve().as_uri() + "?mode=ro"
+                connection = sqlite3.connect(uri, uri=True)
+                try:
+                    row_count = int(
+                        connection.execute("SELECT COUNT(*) FROM journal_rows").fetchone()[0]
+                    )
+                finally:
+                    connection.close()
+            except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+                return fail_closed("LIA_JOURNAL_LIFECYCLE_UNAVAILABLE", str(error))
+
+            age_seconds = time.monotonic() - self._journal_epoch_started
+            due = (
+                self._journal_preexisting
+                or row_count > max_rows
+                or measured_bytes > max_bytes
+                or age_seconds >= max_age
+                or state.exists()
+                or bool(orphaned)
+            )
+        else:
+            if not state.exists() and not orphaned:
+                return None
+            row_count = 0
+            due = True
+        if not due:
+            return None
+
+        archive_dir = journal.parent / "lia-journal-archive"
+        maintenance_max_rows = 0 if self._journal_preexisting and row_count > 0 else max_rows
+        try:
+            maintained = subprocess.run(
+                [
+                    str(binary),
+                    "journal-maintain",
+                    "--db",
+                    str(journal),
+                    "--archive-dir",
+                    str(archive_dir),
+                    "--max-rows",
+                    str(maintenance_max_rows),
+                    "--max-bytes",
+                    str(max_bytes),
+                    "--max-age-seconds",
+                    str(max_age),
+                    "--secret-key-hex",
+                    self._signing_secret_hex,
+                    "--key-id",
+                    "terminus-lia",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as error:
+            return fail_closed("LIA_JOURNAL_MAINTENANCE_TIMEOUT", str(error))
+        except OSError as error:
+            return fail_closed("LIA_JOURNAL_MAINTENANCE_UNAVAILABLE", str(error))
+        if maintained.returncode != 0:
+            return fail_closed(
+                "LIA_JOURNAL_MAINTENANCE_FAILED",
+                maintained.stderr or maintained.stdout,
+            )
+        try:
+            report = json.loads(maintained.stdout)
+        except (json.JSONDecodeError, TypeError) as error:
+            return fail_closed("LIA_JOURNAL_MAINTENANCE_BAD_JSON", str(error))
+        if not isinstance(report, dict) or not isinstance(report.get("rotated"), bool):
+            return fail_closed(
+                "LIA_JOURNAL_MAINTENANCE_BAD_JSON",
+                "maintenance report lacks boolean rotated",
+            )
+        self._journal_preexisting = False
+        if report["rotated"]:
+            self._journal_epoch_started = time.monotonic()
+        return None
+
     async def _execute_commands(self, commands: list[Command], session) -> tuple[bool, str]:
         gated: list[Command] = []
         denied_msgs: list[str] = []
@@ -183,14 +305,18 @@ class TerminusLia(Terminus2):
                 continue
             gated.append(command)
         if denied_msgs and not gated:
-            return False, "LIA denied shell: " + " | ".join(denied_msgs)
-        timeout, output = await super()._execute_commands(gated, session)
-        if denied_msgs:
-            output = (output or "") + "\n" + "\n".join(denied_msgs)
+            timeout = False
+            output = "LIA denied shell: " + " | ".join(denied_msgs)
+        else:
+            timeout, output = await super()._execute_commands(gated, session)
+            if denied_msgs:
+                output = (output or "") + "\n" + "\n".join(denied_msgs)
         # Emit deny_by_reason snapshot for Harbor result collectors (P0-7 / P2-2)
         if self._deny_by_reason:
             hist = dict(self._deny_by_reason)
             output = (output or "") + f"\n[lia] deny_by_reason={json.dumps(hist, sort_keys=True)}"
+        metrics = self.memo_stats()
+        output = (output or "") + f"\n[lia] gate_metrics={json.dumps(metrics, sort_keys=True)}"
         return timeout, output
 
     def _format_deny_message(self, command: str, decision: dict) -> str:
@@ -226,12 +352,25 @@ class TerminusLia(Terminus2):
         and rebound to the current verified journal head.
         """
         key = self._canonical_cmd(command)
-        cached = self._decision_memo.get(key)
-        if cached is not None and cached.get("deny") is True:
-            self._memo_hits += 1
-            return dict(cached)
+        roots = self._workspace_roots()
+        cwd = self._workspace_cwd()
+        context = json.dumps(
+            {
+                "allowed_roots": roots,
+                "cwd": cwd,
+                "home_dir": os.environ.get("HOME", "/home/agent"),
+                "protected_paths": [
+                    f"{root}/.lia" for root in roots if root in ("/app", "/testbed")
+                ],
+                "memo_policy_version": 1,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        cached = self._decision_memo.get(key, context)
         if cached is not None:
-            self._decision_memo.pop(key, None)
+            self._gate_metrics.record_memo_hit()
+            return cached
 
         try:
             binary = lia_bin()
@@ -243,19 +382,28 @@ class TerminusLia(Terminus2):
                 "LIA_JOURNAL_UNAVAILABLE", "no durable per-trial journal path"
             )
 
-        roots = self._workspace_roots()
-        cwd = self._workspace_cwd()
-        self._gate_spawns += 1
+        started = time.monotonic()
+
+        def recorded(decision: dict) -> dict:
+            elapsed_ms = (time.monotonic() - started) * 1000.0
+            self._gate_metrics.record_spawn(
+                elapsed_ms, str(decision.get("reason_code") or "LIA_GATE_UNKNOWN")
+            )
+            return decision
+
         try:
             timeout_seconds = max(
                 0.1, float(os.environ.get("LIA_GATE_TIMEOUT_SECONDS", "10"))
             )
         except ValueError:
             timeout_seconds = 10.0
+        maintenance_failure = self._maintain_journal_if_due(binary, timeout_seconds)
+        if maintenance_failure is not None:
+            return recorded(maintenance_failure)
         try:
             temp_context = tempfile.TemporaryDirectory(prefix="terminus-lia-")
         except OSError as error:
-            return fail_closed("LIA_GATE_IO_FAILED", str(error))
+            return recorded(fail_closed("LIA_GATE_IO_FAILED", str(error)))
         with temp_context as tmp:
             work = Path(tmp)
             cfg = {
@@ -285,7 +433,7 @@ class TerminusLia(Terminus2):
                 )
                 self._durable_journal.parent.mkdir(parents=True, exist_ok=True)
             except OSError as error:
-                return fail_closed("LIA_GATE_IO_FAILED", str(error))
+                return recorded(fail_closed("LIA_GATE_IO_FAILED", str(error)))
             try:
                 proc = subprocess.run(
                     [
@@ -308,9 +456,9 @@ class TerminusLia(Terminus2):
                     timeout=timeout_seconds,
                 )
             except subprocess.TimeoutExpired as error:
-                return fail_closed("LIA_GATE_TIMEOUT", str(error))
+                return recorded(fail_closed("LIA_GATE_TIMEOUT", str(error)))
             except OSError as error:
-                return fail_closed("LIA_GATE_UNAVAILABLE", str(error))
+                return recorded(fail_closed("LIA_GATE_UNAVAILABLE", str(error)))
 
             decision = parse_gate_response(proc.stdout, proc.returncode, proc.stderr)
             try:
@@ -322,28 +470,28 @@ class TerminusLia(Terminus2):
                     timeout=timeout_seconds,
                 )
             except subprocess.TimeoutExpired as error:
-                return fail_closed("LIA_JOURNAL_VERIFY_TIMEOUT", str(error))
+                return recorded(fail_closed("LIA_JOURNAL_VERIFY_TIMEOUT", str(error)))
             except OSError as error:
-                return fail_closed("LIA_JOURNAL_VERIFY_UNAVAILABLE", str(error))
+                return recorded(
+                    fail_closed("LIA_JOURNAL_VERIFY_UNAVAILABLE", str(error))
+                )
             verified = journal_verification_decision(
                 verify.returncode, verify.stdout, verify.stderr
             )
             if verified["deny"]:
-                return verified
+                return recorded(verified)
             receipt_head = validate_receipt_head(decision, self._durable_journal)
             if receipt_head["deny"]:
-                return receipt_head
+                return recorded(receipt_head)
             if decision["deny"]:
-                self._decision_memo[key] = decision
-            return dict(decision)
+                self._decision_memo.put(key, context, decision)
+            return recorded(dict(decision))
 
     def deny_by_reason_histogram(self) -> dict[str, int]:
         """Exporter for Harbor result collectors."""
         return dict(self._deny_by_reason)
 
-    def memo_stats(self) -> dict[str, int]:
-        return {
-            "memo_hits": self._memo_hits,
-            "gate_spawns": self._gate_spawns,
-            "memo_size": len(self._decision_memo),
-        }
+    def memo_stats(self) -> dict:
+        snapshot = self._gate_metrics.snapshot()
+        snapshot["memo_size"] = len(self._decision_memo)
+        return snapshot

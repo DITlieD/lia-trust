@@ -148,6 +148,13 @@
       "pointer": "bench/results/codex-prevent-live-swe-1-6.json"
     },
     {
+      "text": "M3 deny-memo local microbenchmark [MEASURED]: one real lia gate plus journal-verify and receipt-head validation took 25.357 ms; 10000 verified-denial memo hits averaged 0.395 microseconds (64133.903x observed ratio). This is a local TCB microbenchmark, not Harbor utility or a full TB2/Claw rerun; allows are never cached.",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "bench/harbor/results/m3-deny-memo-measure.json"
+    },
+    {
       "text": "lia install wires Claude Code PreToolUse + Codex mcp_servers.lia-trust; installed codex-mcp.sh speaks Content-Length framed MCP with initialize handshake then HARD fabricated-pass and OOS-delete DENY; Claude installed hook DENY; journal-verify OK [MEASURED]. Assurance remains GATE not CONFINE.",
       "tags": [
         "MEASURED"

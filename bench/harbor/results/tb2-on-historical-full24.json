@@ -1,0 +1,73 @@
+{
+  "job": "bench/harbor/runs/tb2-on/2026-07-19__04-28-52",
+  "status": "MEASURED_HISTORICAL_PRE_FIX",
+  "finished_at": "2026-07-19T07:12:33.115739",
+  "n_total": 24,
+  "stats": {
+    "n_completed_trials": 24,
+    "n_errored_trials": 4,
+    "n_running_trials": 0,
+    "n_pending_trials": 0,
+    "n_cancelled_trials": 0,
+    "n_retries": 0,
+    "evals": {
+      "terminus-lia__swe-1-6__terminal-bench-2": {
+        "n_trials": 24,
+        "n_errors": 4,
+        "metrics": [
+          {
+            "mean": 0.4583333333333333
+          }
+        ],
+        "pass_at_k": {},
+        "reward_stats": {
+          "reward": {
+            "1.0": [
+              "configure-git-webserver__GKmAPhM",
+              "fix-git__4xJMDsw",
+              "cancel-async-tasks__GFAwt5v",
+              "modernize-scientific-stack__PKChKkM",
+              "cobol-modernization__nAHytr7",
+              "count-dataset-tokens__8iZj9PY",
+              "git-leak-recovery__fpQXyk6",
+              "headless-terminal__tgnYR6R",
+              "git-multibranch__o95KkYB",
+              "fix-code-vulnerability__KPMVUJg",
+              "log-summary-date-ranges__kJwBikM"
+            ],
+            "0.0": [
+              "largest-eigenval__qa9ba6H",
+              "hf-model-inference__w6Azwtj",
+              "overfull-hbox__3z35sNr",
+              "build-cython-ext__H87QhJT",
+              "gpt2-codegolf__HBDDo8E",
+              "extract-elf__Su7umjm",
+              "adaptive-rejection-sampler__5CrNw53",
+              "db-wal-recovery__PCJJVNy",
+              "gcode-to-text__takS53q",
+              "crack-7z-hash__hegne7x",
+              "kv-store-grpc__8DmN7xx",
+              "chess-best-move__avNTHJT",
+              "build-pmars__kd553up"
+            ]
+          }
+        },
+        "exception_stats": {
+          "AgentTimeoutError": [
+            "largest-eigenval__qa9ba6H",
+            "build-cython-ext__H87QhJT",
+            "adaptive-rejection-sampler__5CrNw53",
+            "crack-7z-hash__hegne7x"
+          ]
+        }
+      }
+    },
+    "n_input_tokens": 31877376,
+    "n_cache_tokens": 0,
+    "n_output_tokens": 507936,
+    "cost_usd": null
+  },
+  "mean_reward": 0.4583333333333333,
+  "n_input_tokens": 31877376,
+  "n_output_tokens": 507936
+}

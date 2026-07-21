@@ -81,6 +81,44 @@ Enforced only where hooks/MCP fire (**GATE**). Not complete mediation; not CONFI
 
 See `docs/CONTRACTS.md`, `docs/harness-compatibility.md`, `docs/threat-model.md`.
 
+### Bounded execution and journal lifecycle
+
+Generic wrapped processes have an explicit deadline (15 minutes by default):
+
+```bash
+lia wrap --repo ./repo --evidence-dir /safe/evidence --config gate-config.json \
+  --secret-key-hex "$LIA_SECRET" --timeout-seconds 900 -- agent-command
+```
+
+On deadline, LIA terminates the directly wrapped child, records
+`GENERIC_AGENT_TIMEOUT`, and exits 124 after writing the observed result and final-diff evidence.
+This is bounded wrapper ownership, not descendant-process or network confinement. The nominal
+deadline does not override cleanup safety: if the OS refuses to kill or reap the direct child, LIA
+stays fail-stop and keeps retrying with bounded diagnostic state instead of returning while that
+child may still be live.
+
+Long journals can be rotated without discarding the full archive, and a compact signed head/tail
+manifest can be verified separately:
+
+```bash
+lia journal-maintain --db journal.db --archive-dir journal-archive \
+  --max-rows 100000 --max-bytes 268435456 --max-age-seconds 86400 \
+  --secret-key-hex "$LIA_SECRET"
+lia journal-anchors --db journal.db --head 2 --tail 2 \
+  --secret-key-hex "$LIA_SECRET" --out anchors.json
+lia journal-anchors-verify anchors.json --expected-public-key-hex "$LIA_PUBLIC_KEY"
+lia journal-verify archived-journal.db --immutable
+```
+
+Rotation keeps the old database verifiable and starts the active database with a signed bridge to
+the prior head. The anchor manifest authenticates retained hashes; it is not a replacement for the
+omitted middle evidence. Maintenance fails closed on a busy/corrupt journal. TerminusLia performs
+the same threshold check automatically; `LIA_JOURNAL_MAX_ROWS`, `LIA_JOURNAL_MAX_BYTES`, and
+`LIA_JOURNAL_MAX_AGE_SECONDS` override its defaults. Normal verification participates in the live
+journal lifecycle lock. `--immutable` is only for a stable offline archive/copy; it creates no
+adjacent lock database and refuses WAL, SHM, or rollback-journal sidecars that immutable SQLite
+would otherwise ignore.
+
 ## What is measured
 
 See `docs/claims.json` — every number in public docs must carry a `[MEASURED]`
