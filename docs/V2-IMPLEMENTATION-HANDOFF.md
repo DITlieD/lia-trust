@@ -369,7 +369,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M4 — process contracts and adapter/public-verification fast-follows
 
-- State: `AUDITED_READY_TO_COMMIT`
+- State: `MILESTONE_COMMITTED`
 - Requirements: P3-5/6/7 local portion, P3-9, live registry client
 - Official interface grounding: Gemini `BeforeTool` fields/decision/exit behavior from
   `https://geminicli.com/docs/hooks/reference/`; Cursor hook events, permission response, and
@@ -431,13 +431,12 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
   write roots. Windows lacks the Unix process-group guarantee and must not inherit that claim.
 - Blocker: none for local M4 scope. Live agent/public-log/registry-network evidence remains optional
   external M6 proof and is never substituted by fixture results.
-- Next action: commit the audited M4 implementation, record its hash, then begin M5 RED
-  confinement/egress/credential isolation fixtures.
-- Commit: pending
+- Next action: begin M5 RED confinement/egress/credential-isolation fixtures.
+- Commit: `5c06dfa9fc0395f5e25e74909b8452023f5db3a4` (`feat: add process contracts and native adapters`)
 
 ### M5 — confinement, egress, and credential/evidence isolation
 
-- State: pending
+- State: `IN_PROGRESS`
 - Requirements: P3-4/P3-10 and threat-model isolation promises
 - Commit: pending
 
