@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import tempfile
 from collections import Counter
@@ -11,6 +12,23 @@ from harbor.agents.terminus_2.terminus_2 import Command, Terminus2
 from harbor.models.agent.context import AgentContext
 
 from .common import lia_bin
+
+try:
+    from bench.harbor.lia_decision import (
+        fail_closed,
+        journal_verification_decision,
+        parse_gate_response,
+        validate_receipt_head,
+    )
+except ModuleNotFoundError as error:
+    if error.name not in {"bench", "bench.harbor"}:
+        raise
+    from lia_decision import (  # type: ignore[no-redef]
+        fail_closed,
+        journal_verification_decision,
+        parse_gate_response,
+        validate_receipt_head,
+    )
 
 # Hard-stop reason codes: strip command, no soft rewrite.
 HARD_DENY_REASONS = frozenset(
@@ -49,11 +67,12 @@ class TerminusLia(Terminus2):
         self._deny_counts: Counter[str] = Counter()
         self._deny_by_reason: Counter[str] = Counter()
         self._durable_journal: Path | None = None
-        # P2-5: short-TTL allow/deny memo keyed by canonical command (no re-spawn)
+        # P2-5: deny-only memo. Allows are always re-evaluated and rebound to the
+        # current verified journal head; a cached allow can never outlive the TCB.
         self._decision_memo: dict[str, dict] = {}
         self._memo_hits = 0
         self._gate_spawns = 0
-        self._hl4_observations: list[dict] = []
+        self._signing_secret_hex = secrets.token_hex(32)
         self._init_durable_journal()
 
     @staticmethod
@@ -61,10 +80,10 @@ class TerminusLia(Terminus2):
         return "terminus-lia"
 
     def version(self) -> str | None:
-        return "0.3.0"
+        return "0.4.0"
 
     def _init_durable_journal(self) -> None:
-        """Optional durable journal outside the empty tempfile (P0-6)."""
+        """Create the per-trial journal outside command-scoped temp directories."""
         override = os.environ.get("LIA_JOURNAL_PATH") or os.environ.get("LIA_JOURNAL_DIR")
         if override:
             p = Path(override)
@@ -86,6 +105,14 @@ class TerminusLia(Terminus2):
                     return
                 except OSError:
                     continue
+        fallback = (
+            Path(tempfile.gettempdir())
+            / "lia-trust"
+            / "terminus-lia"
+            / f"trial-{os.getpid()}-{secrets.token_hex(8)}"
+        )
+        fallback.mkdir(parents=True, mode=0o700)
+        self._durable_journal = fallback / "lia-journal.db"
 
     def _workspace_roots(self) -> list[str]:
         """Real Harbor task mounts, not empty tempfile (P0-1).
@@ -195,23 +222,41 @@ class TerminusLia(Terminus2):
     def _lia_shell_decision(self, command: str) -> dict:
         """Return {deny, reason_code, detail, verdict} from real lia gate CLI.
 
-        Identical commands within a trial hit an in-memory memo (P2-5) so lia is
-        not re-spawned for the same keystrokes.
+        Verified denials are memoized within a trial. Allows are always re-run
+        and rebound to the current verified journal head.
         """
         key = self._canonical_cmd(command)
-        if key in self._decision_memo:
+        cached = self._decision_memo.get(key)
+        if cached is not None and cached.get("deny") is True:
             self._memo_hits += 1
-            return dict(self._decision_memo[key])
+            return dict(cached)
+        if cached is not None:
+            self._decision_memo.pop(key, None)
 
         try:
             binary = lia_bin()
-        except FileNotFoundError:
-            return {"deny": False, "reason_code": None, "detail": "no-lia-bin"}
+        except FileNotFoundError as error:
+            return fail_closed("LIA_GATE_UNAVAILABLE", str(error))
+
+        if self._durable_journal is None:
+            return fail_closed(
+                "LIA_JOURNAL_UNAVAILABLE", "no durable per-trial journal path"
+            )
 
         roots = self._workspace_roots()
         cwd = self._workspace_cwd()
         self._gate_spawns += 1
-        with tempfile.TemporaryDirectory(prefix="terminus-lia-") as tmp:
+        try:
+            timeout_seconds = max(
+                0.1, float(os.environ.get("LIA_GATE_TIMEOUT_SECONDS", "10"))
+            )
+        except ValueError:
+            timeout_seconds = 10.0
+        try:
+            temp_context = tempfile.TemporaryDirectory(prefix="terminus-lia-")
+        except OSError as error:
+            return fail_closed("LIA_GATE_IO_FAILED", str(error))
+        with temp_context as tmp:
             work = Path(tmp)
             cfg = {
                 "allowed_roots": roots,
@@ -226,78 +271,70 @@ class TerminusLia(Terminus2):
             }
             cfg_path = work / "gate-config.json"
             req_path = work / "request.json"
-            cfg_path.write_text(json.dumps(cfg))
-            req_path.write_text(
-                json.dumps(
-                    {
-                        "gate_id": "shell-irreversible",
-                        "action_id": "00000000-0000-4000-8000-000000000001",
-                        "kind": "shell",
-                        "payload": {"command": command},
-                    }
-                )
-            )
-            journal = self._durable_journal or (work / "journal.db")
-            if self._durable_journal:
-                journal.parent.mkdir(parents=True, exist_ok=True)
-            proc = subprocess.run(
-                [
-                    str(binary),
-                    "gate",
-                    "--config",
-                    str(cfg_path),
-                    "--request",
-                    str(req_path),
-                    "--journal",
-                    str(journal),
-                    "--secret-key-hex",
-                    "55" * 32,
-                    "--key-id",
-                    "terminus-lia",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if not proc.stdout.strip():
-                return {
-                    "deny": False,
-                    "reason_code": None,
-                    "detail": (proc.stderr or "")[:200],
-                }
             try:
-                parsed = json.loads(proc.stdout)
-            except json.JSONDecodeError:
-                return {"deny": False, "reason_code": None, "detail": "bad-json"}
+                cfg_path.write_text(json.dumps(cfg))
+                req_path.write_text(
+                    json.dumps(
+                        {
+                            "gate_id": "shell-irreversible",
+                            "action_id": "00000000-0000-4000-8000-000000000001",
+                            "kind": "shell",
+                            "payload": {"command": command},
+                        }
+                    )
+                )
+                self._durable_journal.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                return fail_closed("LIA_GATE_IO_FAILED", str(error))
+            try:
+                proc = subprocess.run(
+                    [
+                        str(binary),
+                        "gate",
+                        "--config",
+                        str(cfg_path),
+                        "--request",
+                        str(req_path),
+                        "--journal",
+                        str(self._durable_journal),
+                        "--secret-key-hex",
+                        self._signing_secret_hex,
+                        "--key-id",
+                        "terminus-lia",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as error:
+                return fail_closed("LIA_GATE_TIMEOUT", str(error))
+            except OSError as error:
+                return fail_closed("LIA_GATE_UNAVAILABLE", str(error))
 
-            reason_code = None
-            detail = None
-            verdicts: list[str] = []
-            for o in parsed.get("outcomes") or []:
-                if isinstance(o, dict):
-                    if o.get("verdict"):
-                        verdicts.append(str(o["verdict"]).lower())
-                    if o.get("reason_code") and reason_code is None:
-                        reason_code = str(o["reason_code"])
-                    if o.get("detail") and detail is None:
-                        detail = str(o["detail"])
-            overall = parsed.get("overall")
-            if isinstance(overall, str):
-                verdicts.append(overall.lower())
-            elif isinstance(overall, dict):
-                if overall.get("verdict"):
-                    verdicts.append(str(overall["verdict"]).lower())
-                if overall.get("reason_code") and reason_code is None:
-                    reason_code = str(overall["reason_code"])
-
-            deny = any(v in {"deny", "refuted", "unsupported", "quarantine"} for v in verdicts)
-            decision = {
-                "deny": deny,
-                "reason_code": reason_code,
-                "detail": detail,
-                "verdicts": verdicts,
-            }
-            self._decision_memo[key] = decision
+            decision = parse_gate_response(proc.stdout, proc.returncode, proc.stderr)
+            try:
+                verify = subprocess.run(
+                    [str(binary), "journal-verify", str(self._durable_journal)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as error:
+                return fail_closed("LIA_JOURNAL_VERIFY_TIMEOUT", str(error))
+            except OSError as error:
+                return fail_closed("LIA_JOURNAL_VERIFY_UNAVAILABLE", str(error))
+            verified = journal_verification_decision(
+                verify.returncode, verify.stdout, verify.stderr
+            )
+            if verified["deny"]:
+                return verified
+            receipt_head = validate_receipt_head(decision, self._durable_journal)
+            if receipt_head["deny"]:
+                return receipt_head
+            if decision["deny"]:
+                self._decision_memo[key] = decision
             return dict(decision)
 
     def deny_by_reason_histogram(self) -> dict[str, int]:
@@ -310,112 +347,3 @@ class TerminusLia(Terminus2):
             "gate_spawns": self._gate_spawns,
             "memo_size": len(self._decision_memo),
         }
-
-    def _looks_like_test_command(self, command: str) -> bool:
-        c = command.lower()
-        return any(
-            tok in c
-            for tok in (
-                "pytest",
-                "cargo test",
-                "npm test",
-                "go test",
-                "python -m unittest",
-                "nosetests",
-            )
-        )
-
-    def record_hl4_observation(
-        self, command: str, exit_code: int, stdout: str = "", stderr: str = ""
-    ) -> dict | None:
-        """Optional HL-4 wrapper observation for detectable test commands (P2-17)."""
-        if not self._looks_like_test_command(command):
-            return None
-        import hashlib
-
-        def h(s: str) -> str:
-            return hashlib.sha256(s.encode()).hexdigest()
-
-        obs = {
-            "exit_code": exit_code,
-            "stdout_sha256": h(stdout),
-            "stderr_sha256": h(stderr),
-            "argv": command.strip().split(),
-            "cwd": self._workspace_cwd(),
-            "coverage_profraw_sha256": h(""),
-            "wrapper_digest_sha256": h("terminus-lia-hl4-v1"),
-            "command": command[:500],
-        }
-        self._hl4_observations.append(obs)
-        # Persist beside durable journal when available
-        if self._durable_journal:
-            path = self._durable_journal.parent / "hl4-observations.jsonl"
-            try:
-                with path.open("a") as f:
-                    f.write(json.dumps(obs) + "\n")
-            except OSError:
-                pass
-        return obs
-
-    def maybe_completion_gate(self, modified_paths: list[str], has_test_result: bool) -> dict:
-        """Optional evidence-completeness check when agent claims done (P1-14)."""
-        try:
-            binary = lia_bin()
-        except FileNotFoundError:
-            return {"deny": False, "detail": "no-lia-bin"}
-        roots = self._workspace_roots()
-        cwd = self._workspace_cwd()
-        with tempfile.TemporaryDirectory(prefix="terminus-complete-") as tmp:
-            work = Path(tmp)
-            cfg = {
-                "allowed_roots": roots,
-                "home_dir": os.environ.get("HOME", "/home/agent"),
-                "cwd": cwd,
-                "protected_paths": [],
-                "registry": {},
-                "env": {"HOME": os.environ.get("HOME", "/home/agent")},
-            }
-            req = {
-                "gate_id": "evidence-completeness",
-                "action_id": "00000000-0000-4000-8000-000000000099",
-                "kind": "complete_task",
-                "payload": {
-                    "modified_paths": modified_paths,
-                    "has_test_result": has_test_result,
-                    "new_dependencies": [],
-                    "deps_registry_evidence": True,
-                },
-            }
-            (work / "c.json").write_text(json.dumps(cfg))
-            (work / "r.json").write_text(json.dumps(req))
-            proc = subprocess.run(
-                [
-                    str(binary),
-                    "gate",
-                    "--config",
-                    str(work / "c.json"),
-                    "--request",
-                    str(work / "r.json"),
-                    "--journal",
-                    str(work / "j.db"),
-                    "--secret-key-hex",
-                    "55" * 32,
-                    "--key-id",
-                    "terminus-complete",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            try:
-                parsed = json.loads(proc.stdout or "{}")
-                o = (parsed.get("outcomes") or [{}])[0]
-                return {
-                    "deny": str(o.get("verdict", "")).lower()
-                    in {"deny", "incomplete", "refuted", "unsupported"},
-                    "verdict": o.get("verdict"),
-                    "reason_code": o.get("reason_code"),
-                    "detail": o.get("detail"),
-                }
-            except json.JSONDecodeError:
-                return {"deny": False, "detail": "bad-json"}

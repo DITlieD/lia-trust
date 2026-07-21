@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use lia_gates::{evaluate_action_gates, GateConfig, GateOutcome, GatePayload};
 use lia_journal::{append_signed, Journal, JournalError, SigningIdentity};
-use lia_protocol::{ActionKind, Event, GateVerdictEvent, Verdict};
+use lia_protocol::{ActionKind, Event, GateVerdictEvent, RiskTier, Verdict};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -65,7 +66,14 @@ fn rank(v: &Verdict) -> u8 {
 }
 
 pub fn is_blocking(v: &Verdict) -> bool {
-    matches!(v, Verdict::Deny | Verdict::Refuted | Verdict::Quarantine)
+    matches!(
+        v,
+        Verdict::Deny
+            | Verdict::Refuted
+            | Verdict::Quarantine
+            | Verdict::Incomplete
+            | Verdict::Unsupported
+    )
 }
 
 pub fn dispatch_action(
@@ -74,8 +82,42 @@ pub fn dispatch_action(
     payload: GatePayload,
     ctx: &RunContext,
 ) -> Result<DispatchResult, DispatchError> {
-    let outcomes = evaluate_action_gates(&kind, action_id, &payload, &ctx.config)
+    let mut outcomes = evaluate_action_gates(&kind, action_id, &payload, &ctx.config)
         .map_err(AdapterError::from)?;
+    append_production_quality_outcomes(&kind, action_id, &payload, &ctx.config, &mut outcomes);
+    finish_dispatch(kind, action_id, outcomes, ctx)
+}
+
+pub(crate) fn dispatch_rejection(
+    action_id: Uuid,
+    reason_code: &str,
+    detail: &str,
+    ctx: &RunContext,
+) -> Result<DispatchResult, DispatchError> {
+    let mut hasher = Sha256::new();
+    hasher.update(detail.as_bytes());
+    let outcome = GateOutcome {
+        gate_id: "adapter-input".into(),
+        action_id,
+        verdict: Verdict::Deny,
+        reason_code: reason_code.into(),
+        risk_tier: RiskTier::Security,
+        detail: Some(detail.into()),
+        offending: None,
+        evidence_sha256: hex::encode(hasher.finalize()),
+        timestamp: chrono::Utc::now(),
+        hl4: None,
+        shareable: None,
+    };
+    finish_dispatch(ActionKind::Other, action_id, vec![outcome], ctx)
+}
+
+fn finish_dispatch(
+    kind: ActionKind,
+    action_id: Uuid,
+    outcomes: Vec<GateOutcome>,
+    ctx: &RunContext,
+) -> Result<DispatchResult, DispatchError> {
     let overall = if outcomes.is_empty() {
         Verdict::Deny
     } else {
@@ -129,6 +171,157 @@ pub fn dispatch_action(
         journal_receipts,
         allowed,
     })
+}
+
+fn append_production_quality_outcomes(
+    kind: &ActionKind,
+    action_id: Uuid,
+    payload: &GatePayload,
+    config: &GateConfig,
+    outcomes: &mut Vec<GateOutcome>,
+) {
+    if matches!(kind, ActionKind::WriteFile) {
+        if let (Some(path), Some(text)) = (payload.path.as_deref(), payload.text.as_deref()) {
+            if let Some(language) = language_for_path(path) {
+                match lia_ast::scan_source(text, language, &lia_ast::ScanOptions::default()) {
+                    Ok(report) => outcomes.push(lia_ast::ast_report_to_outcome(&report, action_id)),
+                    Err(error) => outcomes.push(quality_error_outcome(
+                        "ast",
+                        "AST_INVALID_INPUT",
+                        &error.to_string(),
+                        text.as_bytes(),
+                        action_id,
+                    )),
+                }
+            }
+        }
+    }
+
+    if let Some(graph_value) = payload.taint_graph.as_ref() {
+        let graph_json = graph_value.to_string();
+        match lia_taint::parse_graph(&graph_json).and_then(|graph| lia_taint::check_flows(&graph)) {
+            Ok(report) => outcomes.push(taint_report_to_outcome(&report, graph_value, action_id)),
+            Err(error) => outcomes.push(quality_error_outcome(
+                "taint",
+                "TAINT_INVALID_INPUT",
+                &error.to_string(),
+                graph_json.as_bytes(),
+                action_id,
+            )),
+        }
+    }
+
+    if let Some(claim_value) = payload.ground_claim.as_ref() {
+        let claim_json = claim_value.to_string();
+        match lia_ground::parse_claim(&claim_json) {
+            Ok(claim) => {
+                let ground_context = lia_ground::GroundContext::from_gate_config(config);
+                match lia_ground::verify_claim_with_id(&claim, &ground_context, action_id) {
+                    Ok(result) => outcomes.push(lia_ground::ground_result_to_outcome(&result)),
+                    Err(error) => outcomes.push(quality_error_outcome(
+                        "ground",
+                        "GROUND_VERIFICATION_ERROR",
+                        &error.to_string(),
+                        claim_json.as_bytes(),
+                        action_id,
+                    )),
+                }
+            }
+            Err(error) => outcomes.push(quality_error_outcome(
+                "ground",
+                "GROUND_INVALID_INPUT",
+                &error.to_string(),
+                claim_json.as_bytes(),
+                action_id,
+            )),
+        }
+    }
+
+    if let Some(exchange_value) = payload.syco_exchange.as_ref() {
+        let exchange_json = exchange_value.to_string();
+        match lia_syco::parse_exchange(&exchange_json)
+            .and_then(|exchange| lia_syco::detect(&exchange))
+        {
+            Ok(report) => outcomes.push(lia_syco::syco_report_to_outcome(&report, action_id)),
+            Err(error) => outcomes.push(quality_error_outcome(
+                "syco",
+                "SYCO_INVALID_INPUT",
+                &error.to_string(),
+                exchange_json.as_bytes(),
+                action_id,
+            )),
+        }
+    }
+}
+
+fn language_for_path(path: &str) -> Option<lia_ast::Language> {
+    match std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    {
+        Some("py") => Some(lia_ast::Language::Python),
+        Some("rs") => Some(lia_ast::Language::Rust),
+        Some("js" | "mjs" | "cjs") => Some(lia_ast::Language::Javascript),
+        _ => None,
+    }
+}
+
+fn taint_report_to_outcome(
+    report: &lia_taint::TaintReport,
+    graph: &serde_json::Value,
+    action_id: Uuid,
+) -> GateOutcome {
+    let evidence = serde_json::json!({
+        "graph": graph,
+        "findings": report.findings,
+    })
+    .to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(evidence.as_bytes());
+    GateOutcome {
+        gate_id: "taint".into(),
+        action_id,
+        verdict: match report.verdict {
+            lia_taint::TaintVerdict::Allow => Verdict::Allow,
+            lia_taint::TaintVerdict::Deny => Verdict::Deny,
+        },
+        reason_code: report.reason_code.clone(),
+        risk_tier: RiskTier::Security,
+        detail: report
+            .findings
+            .iter()
+            .find(|finding| !finding.declassified)
+            .map(|finding| format!("{} -> {}", finding.source, finding.sink)),
+        offending: None,
+        evidence_sha256: hex::encode(hasher.finalize()),
+        timestamp: chrono::Utc::now(),
+        hl4: None,
+        shareable: None,
+    }
+}
+
+fn quality_error_outcome(
+    gate_id: &str,
+    reason_code: &str,
+    detail: &str,
+    evidence: &[u8],
+    action_id: Uuid,
+) -> GateOutcome {
+    let mut hasher = Sha256::new();
+    hasher.update(evidence);
+    GateOutcome {
+        gate_id: gate_id.into(),
+        action_id,
+        verdict: Verdict::Deny,
+        reason_code: reason_code.into(),
+        risk_tier: RiskTier::Security,
+        detail: Some(detail.into()),
+        offending: None,
+        evidence_sha256: hex::encode(hasher.finalize()),
+        timestamp: chrono::Utc::now(),
+        hl4: None,
+        shareable: None,
+    }
 }
 
 pub fn denial_summary(result: &DispatchResult) -> Option<String> {

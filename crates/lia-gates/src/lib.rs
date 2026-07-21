@@ -158,6 +158,15 @@ pub struct GatePayload {
     pub is_delete: Option<bool>,
     #[serde(default)]
     pub is_write: Option<bool>,
+    /// Optional structured claim supplied to an explicit grounding action.
+    #[serde(default)]
+    pub ground_claim: Option<serde_json::Value>,
+    /// Optional structured exchange supplied to an explicit agreement check.
+    #[serde(default)]
+    pub syco_exchange: Option<serde_json::Value>,
+    /// Optional caller-supplied flow graph checked in addition to write admission.
+    #[serde(default)]
+    pub taint_graph: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -215,10 +224,7 @@ pub fn load_core_rules(path: impl AsRef<Path>) -> Result<FrozenPolicy, GateError
     Ok(freeze_policy_from_path(path)?)
 }
 
-pub fn evaluate_gate(
-    request: &GateRequest,
-    config: &GateConfig,
-) -> Result<GateOutcome, GateError> {
+pub fn evaluate_gate(request: &GateRequest, config: &GateConfig) -> Result<GateOutcome, GateError> {
     if !CORE_GATE_IDS.contains(&request.gate_id.as_str()) {
         return Err(GateError::UnknownGate(request.gate_id.clone()));
     }
@@ -240,7 +246,9 @@ fn validate_gate_reason_code(code: &str) -> Result<(), GateError> {
     if GATE_REASON_CODES.contains(&code) {
         Ok(())
     } else {
-        Err(GateError::Invalid(format!("unknown gate reason code: {code}")))
+        Err(GateError::Invalid(format!(
+            "unknown gate reason code: {code}"
+        )))
     }
 }
 

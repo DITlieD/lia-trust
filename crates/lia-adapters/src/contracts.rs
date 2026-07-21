@@ -49,6 +49,8 @@ pub const PROXY_TOOL_SHELL: &str = "shell";
 pub const PROXY_TOOL_RUN_TEST: &str = "run_test";
 pub const PROXY_TOOL_COMPLETE_TASK: &str = "complete_task";
 pub const PROXY_TOOL_ADD_DEPENDENCY: &str = "add_dependency";
+pub const PROXY_TOOL_GROUND_CLAIM: &str = "ground_claim";
+pub const PROXY_TOOL_CHECK_AGREEMENT: &str = "check_agreement";
 
 pub const CAP_PRE_WRITE_BLOCK: &str = "pre_write_block";
 pub const CAP_POST_WRITE_RECEIPT: &str = "post_write_receipt";

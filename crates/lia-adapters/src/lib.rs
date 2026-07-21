@@ -1,8 +1,8 @@
 mod assurance;
 mod claude_code;
+mod codex;
 mod conformance;
 mod contracts;
-mod codex;
 mod dispatch;
 mod generic;
 mod install;
@@ -13,29 +13,24 @@ pub use assurance::{
     known_adapters, load_assurance_from_probe_file, report_for_adapter, AssuranceLevel,
     AssuranceReport, CapabilityProbe, GateAssuranceCell, GateCell,
 };
-pub use conformance::{assert_adapter, load_suite, ConformanceReport, SuiteManifest};
 pub use claude_code::{
     decision_json, handle_pre_tool_stdin, map_tool_to_action, on_pre_tool, parse_pre_tool_use,
     HookDecision, PreToolUseInput,
-};
-pub use contracts::{
-    contracts_value, load_contracts, ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_GENERIC,
-    ALL_CAPABILITY_KEYS, CONTRACTS_JSON, MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
-    MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
 };
 pub use codex::{
     handle_jsonrpc, handle_jsonrpc_opt, proxy_tool_call, proxy_tool_names, serve_mcp_stdio,
     serve_mcp_stdio_io, JsonRpcRequest, ProxyCallResult, MCP_PROTOCOL_VERSION, MCP_SERVER_NAME,
 };
-pub use mcp_stdio::{frame_json, read_framed_message, write_framed_message};
+pub use conformance::{assert_adapter, load_suite, ConformanceReport, SuiteManifest};
+pub use contracts::{
+    contracts_value, load_contracts, ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_GENERIC,
+    ALL_CAPABILITY_KEYS, CONTRACTS_JSON, MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
+    MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
+};
 pub use dispatch::{
     denial_summary, dispatch_action, is_blocking, worst_verdict, DispatchResult, RunContext,
 };
 pub use generic::{admit_final_diff, wrap, WrapOptions, WrapReport};
-pub use mcp_inspection::{
-    handle_inspection_call, inspection_tool_names, load_probe, refuse_mutation, DenialRecord,
-    InspectionContext,
-};
 pub use install::{
     claude_hook_present, codex_mcp_present, default_claude_home, default_codex_home,
     default_lia_home, install, looks_like_live_user_home, merge_claude_settings, merge_codex_toml,
@@ -43,8 +38,15 @@ pub use install::{
     InstallReport, InstallRequest, KernelBoundary, CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER,
     LIA_HOOK_MARKER, MANIFEST_NAME,
 };
+pub use mcp_inspection::{
+    handle_inspection_call, inspection_tool_names, load_probe, refuse_mutation, DenialRecord,
+    InspectionContext,
+};
+pub use mcp_stdio::{frame_json, read_framed_message, write_framed_message};
 
-use lia_gates::{evaluate_action_gates, evaluate_gate, GateConfig, GateOutcome, GatePayload, GateRequest};
+use lia_gates::{
+    evaluate_action_gates, evaluate_gate, GateConfig, GateOutcome, GatePayload, GateRequest,
+};
 use lia_protocol::ActionKind;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -105,8 +107,8 @@ mod tests {
     use super::*;
     use crate::assurance::AssuranceReport;
     use crate::contracts::{
-        CAP_COMPLETION_GATE, CAP_IMMUTABLE_JOURNAL, CAP_OFFLINE_VERIFICATION, CAP_POST_WRITE_RECEIPT,
-        CAP_PRE_WRITE_BLOCK, CAP_SHELL_PRE_BLOCK, CAP_SHELL_RESULT_CAPTURE,
+        CAP_COMPLETION_GATE, CAP_IMMUTABLE_JOURNAL, CAP_OFFLINE_VERIFICATION,
+        CAP_POST_WRITE_RECEIPT, CAP_PRE_WRITE_BLOCK, CAP_SHELL_PRE_BLOCK, CAP_SHELL_RESULT_CAPTURE,
     };
     use lia_gates::GateConfig;
     use std::collections::BTreeMap;
@@ -134,6 +136,7 @@ mod tests {
         let probe = CapabilityProbe {
             adapter: ADAPTER_CLAUDE_CODE.into(),
             keys,
+            gate_cells: BTreeMap::new(),
             probed_at: None,
             notes: vec![],
         };
@@ -151,6 +154,7 @@ mod tests {
         let probe = CapabilityProbe {
             adapter: ADAPTER_GENERIC.into(),
             keys,
+            gate_cells: BTreeMap::new(),
             probed_at: None,
             notes: vec![],
         };
@@ -231,7 +235,10 @@ mod tests {
         let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
         assert_eq!(decision.permission_decision, "deny");
         let d = decision.dispatch.expect("dispatch");
-        assert!(d.outcomes.iter().any(|o| o.verdict == lia_protocol::Verdict::Refuted));
+        assert!(d
+            .outcomes
+            .iter()
+            .any(|o| o.verdict == lia_protocol::Verdict::Refuted));
     }
 
     #[test]
@@ -253,6 +260,7 @@ mod tests {
         let probe = CapabilityProbe {
             adapter: ADAPTER_CLAUDE_CODE.into(),
             keys,
+            gate_cells: BTreeMap::new(),
             probed_at: None,
             notes: vec![],
         };
@@ -263,52 +271,4 @@ mod tests {
             .iter()
             .any(|g| g.gate_id == "shell-irreversible" && g.cell == GateCell::Prevent));
     }
-
-    #[test]
-    fn admit_write_ast_catches_python_eval() {
-        let reason = admit_write_with_ast(
-            std::path::Path::new("evil.py"),
-            "x = eval(user_input)\n",
-        )
-        .expect("scan");
-        assert_eq!(reason.as_deref(), Some("AST_EVAL"));
-    }
-
-    #[test]
-    fn admit_taint_graph_denies_untrusted_to_sink() {
-        let g = r#"{"nodes":[{"id":"s","kind":"untrusted_source"},{"id":"k","kind":"destructive_sink"}],"edges":[{"from":"s","to":"k"}]}"#;
-        let (allow, code) = admit_taint_graph(g).expect("taint");
-        assert!(!allow);
-        assert_eq!(code, "TAINT_UNTRUSTED_TO_DESTRUCTIVE_SINK");
-    }
-}
-
-/// Optional AST gate on write/diff admission (P1-11). Returns deny reason if blocked.
-pub fn admit_write_with_ast(
-    path: &std::path::Path,
-    text: &str,
-) -> Result<Option<String>, AdapterError> {
-    use lia_ast::{scan_source, Language, ScanOptions};
-    let lang = match path.extension().and_then(|e| e.to_str()) {
-        Some("py") => Language::Python,
-        Some("rs") => Language::Rust,
-        Some("js") | Some("mjs") | Some("cjs") => Language::Javascript,
-        _ => return Ok(None),
-    };
-    let opts = ScanOptions::default();
-    let report =
-        scan_source(text, lang, &opts).map_err(|e| AdapterError::Invalid(e.to_string()))?;
-    if let Some(hit) = report.hits.first() {
-        return Ok(Some(hit.predicate.reason_code().to_string()));
-    }
-    Ok(None)
-}
-
-/// Invoke taint check_flows when graph supplied (P1-12).
-pub fn admit_taint_graph(graph_json: &str) -> Result<(bool, String), AdapterError> {
-    use lia_taint::{check_flows, parse_graph, TaintVerdict};
-    let g = parse_graph(graph_json).map_err(|e| AdapterError::Invalid(e.to_string()))?;
-    let r = check_flows(&g).map_err(|e| AdapterError::Invalid(e.to_string()))?;
-    let allow = matches!(r.verdict, TaintVerdict::Allow);
-    Ok((allow, r.reason_code.clone()))
 }

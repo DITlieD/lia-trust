@@ -55,22 +55,32 @@ fn install_cli_fixture_wires_and_uninstalls() {
         ])
         .output()
         .expect("install");
-    assert!(out.status.success(), "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(report["claude_hook_installed"], true);
     assert_eq!(report["codex_mcp_installed"], true);
     assert!(report["kernel"]["assurance"]
         .as_str()
         .unwrap_or("")
-        .contains("GATE"));
+        .contains("UNMEASURED"));
     assert!(!report["kernel"]["assurance"]
         .as_str()
         .unwrap_or("")
-        .contains("complete-mediation")
-        || report["kernel"]["assurance"]
+        .contains("PREVENT"));
+    assert!(
+        !report["kernel"]["assurance"]
             .as_str()
             .unwrap_or("")
-            .contains("never CONFINE"));
+            .contains("complete-mediation")
+            || report["kernel"]["assurance"]
+                .as_str()
+                .unwrap_or("")
+                .contains("never CONFINE")
+    );
 
     let settings = fs::read_to_string(claude.join("settings.json")).unwrap();
     assert!(settings.contains("lia-trust-kernel") || settings.contains("claude-pretool"));
@@ -93,7 +103,11 @@ fn install_cli_fixture_wires_and_uninstalls() {
         "registry": {},
         "env": {}
     });
-    fs::write(lia_home.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap()).unwrap();
+    fs::write(
+        lia_home.join("config.json"),
+        serde_json::to_string_pretty(&cfg).unwrap(),
+    )
+    .unwrap();
 
     let wrap = lia_home.join("bin/codex-mcp.sh");
     assert!(wrap.exists(), "installed codex wrapper missing");
@@ -112,7 +126,11 @@ fn install_cli_fixture_wires_and_uninstalls() {
         ])
         .output()
         .expect("uninstall");
-    assert!(un.status.success(), "stderr={}", String::from_utf8_lossy(&un.stderr));
+    assert!(
+        un.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&un.stderr)
+    );
     let urep: serde_json::Value = serde_json::from_slice(&un.stdout).unwrap();
     assert_eq!(urep["claude_hook_installed"], false);
     assert_eq!(urep["codex_mcp_installed"], false);
@@ -182,7 +200,8 @@ fn drive_installed_codex_mcp_session(wrap: &std::path::Path) {
     let init = read_framed(&mut stdout);
     assert!(init.get("error").is_none(), "initialize failed: {init}");
     assert_eq!(
-        init.pointer("/result/serverInfo/name").and_then(|v| v.as_str()),
+        init.pointer("/result/serverInfo/name")
+            .and_then(|v| v.as_str()),
         Some("lia-trust")
     );
 
@@ -230,7 +249,8 @@ fn drive_installed_codex_mcp_session(wrap: &std::path::Path) {
         "expected HARD deny: {deny}"
     );
     assert_eq!(
-        deny.pointer("/result/lia/allowed").and_then(|v| v.as_bool()),
+        deny.pointer("/result/lia/allowed")
+            .and_then(|v| v.as_bool()),
         Some(false)
     );
 

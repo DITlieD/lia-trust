@@ -80,16 +80,15 @@ impl Default for KernelBoundary {
                 "thin adapters at harness tool boundaries".into(),
             ],
             enforced_on: vec![
-                "Claude Code: PreToolUse hook path (matched tools)".into(),
-                "Codex: MCP/tool proxy path (lia-trust server)".into(),
+                "configured surface: Claude Code PreToolUse hook (unprobed at install)".into(),
+                "configured surface: Codex MCP/tool proxy (unprobed at install)".into(),
             ],
             cannot_observe: vec![
                 "process/network CONFINE (v1 forbids CONFINE claim)".into(),
                 "non-tool side effects and @-path reads outside hooks".into(),
-                "credential broker / egress PREVENT".into(),
+                "credential brokering and egress enforcement (not observed)".into(),
             ],
-            assurance: "GATE (PREVENT where hooks/proxy fire); never CONFINE/complete-mediation"
-                .into(),
+            assurance: "UNMEASURED at install; run bench/probe_assurance.sh before assigning gate cells; never CONFINE/complete-mediation".into(),
         }
     }
 }
@@ -172,9 +171,7 @@ pub fn merge_claude_settings(existing: &Value, wrapper_cmd: &str) -> Result<Valu
     let hooks_obj = hooks
         .as_object_mut()
         .ok_or_else(|| InstallError::Invalid("hooks must be object".into()))?;
-    let pre = hooks_obj
-        .entry("PreToolUse")
-        .or_insert_with(|| json!([]));
+    let pre = hooks_obj.entry("PreToolUse").or_insert_with(|| json!([]));
     let arr = pre
         .as_array_mut()
         .ok_or_else(|| InstallError::Invalid("PreToolUse must be array".into()))?;
@@ -265,7 +262,9 @@ pub fn merge_codex_toml(existing: &str, command: &str, args: &[String]) -> Strin
         out.push('\n');
         out.push('\n');
     }
-    out.push_str(&format!("# {LIA_HOOK_MARKER} — managed by `lia install`; do not hand-edit\n"));
+    out.push_str(&format!(
+        "# {LIA_HOOK_MARKER} — managed by `lia install`; do not hand-edit\n"
+    ));
     out.push_str(&format!("[mcp_servers.{CODEX_MCP_SERVER}]\n"));
     out.push_str(&format!("command = {}\n", toml_string(command)));
     out.push_str("args = [");
@@ -410,23 +409,88 @@ pub fn default_gate_config_json(allowed_roots: &[PathBuf], cwd: &Path) -> Value 
 }
 
 pub fn default_probe_json(adapter: &str) -> Value {
+    let (keys, gate_cells, note) = match adapter {
+        "claude-code" => (
+            json!({
+                "pre_write_block": false,
+                "post_write_receipt": false,
+                "shell_pre_block": false,
+                "shell_result_capture": false,
+                "network_control": false,
+                "credential_broker": false,
+                "completion_gate": false,
+                "subagent_visibility": false,
+                "immutable_journal": false,
+                "offline_verification": false,
+            }),
+            json!({
+                "test-integrity": "CANNOT-OBSERVE",
+                "evidence-completeness": "CANNOT-OBSERVE",
+                "filesystem-scope": "CANNOT-OBSERVE",
+                "shell-irreversible": "CANNOT-OBSERVE",
+                "dependency-reality": "CANNOT-OBSERVE",
+                "secret-output": "CANNOT-OBSERVE",
+                "journal-tamper": "CANNOT-OBSERVE"
+            }),
+            "install-time capability shape only; run bench/probe_assurance.sh before publishing cells",
+        ),
+        "codex" => (
+            json!({
+                "pre_write_block": false,
+                "post_write_receipt": false,
+                "shell_pre_block": false,
+                "shell_result_capture": false,
+                "network_control": false,
+                "credential_broker": false,
+                "completion_gate": false,
+                "subagent_visibility": false,
+                "immutable_journal": false,
+                "offline_verification": false,
+            }),
+            json!({
+                "test-integrity": "CANNOT-OBSERVE",
+                "evidence-completeness": "CANNOT-OBSERVE",
+                "filesystem-scope": "CANNOT-OBSERVE",
+                "shell-irreversible": "CANNOT-OBSERVE",
+                "dependency-reality": "CANNOT-OBSERVE",
+                "secret-output": "CANNOT-OBSERVE",
+                "journal-tamper": "CANNOT-OBSERVE"
+            }),
+            "install-time capability shape only; run bench/probe_assurance.sh before publishing cells",
+        ),
+        _ => (
+            json!({
+                "pre_write_block": false,
+                "post_write_receipt": false,
+                "shell_pre_block": false,
+                "shell_result_capture": false,
+                "network_control": false,
+                "credential_broker": false,
+                "completion_gate": false,
+                "subagent_visibility": false,
+                "immutable_journal": false,
+                "offline_verification": false,
+            }),
+            json!({
+                "test-integrity": "CANNOT-OBSERVE",
+                "evidence-completeness": "CANNOT-OBSERVE",
+                "filesystem-scope": "CANNOT-OBSERVE",
+                "shell-irreversible": "CANNOT-OBSERVE",
+                "dependency-reality": "CANNOT-OBSERVE",
+                "secret-output": "CANNOT-OBSERVE",
+                "journal-tamper": "CANNOT-OBSERVE"
+            }),
+            "install-time capability shape only; run bench/probe_assurance.sh before publishing cells",
+        ),
+    };
     json!({
         "adapter": adapter,
-        "keys": {
-            "pre_write_block": true,
-            "post_write_receipt": true,
-            "shell_pre_block": true,
-            "shell_result_capture": true,
-            "network_control": false,
-            "credential_broker": false,
-            "completion_gate": true,
-            "subagent_visibility": true,
-            "immutable_journal": true,
-            "offline_verification": true,
-        },
+        "keys": keys,
+        "gate_cells": gate_cells,
         "probed_at": null,
         "notes": [
-            "install-time probe defaults: GATE at tool boundary; network/credential CANNOT-OBSERVE",
+            note,
+            "network/credential CANNOT-OBSERVE",
             "not CONFINE; complete mediation not claimed"
         ],
     })
@@ -448,8 +512,10 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &req.codex_home,
     );
     let mut notes = vec![
-        "Kernel = protocol + journal + Ed25519 + seven gates + offline verify + thin adapters".into(),
-        "Assurance: GATE (PREVENT on hook/MCP fire); never CONFINE in v1".into(),
+        "Kernel = protocol + journal + Ed25519 + seven gates + offline verify + thin adapters"
+            .into(),
+        "Assurance: UNMEASURED at install; runtime probe required before PREVENT/DETECT claims"
+            .into(),
     ];
 
     if !req.lia_bin.exists() && !req.dry_run {
@@ -585,14 +651,20 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             fs::create_dir_all(parent)?;
         }
         write_pretty_json(&paths.claude_settings, &claude_new)?;
-        notes.push(format!("removed LIA hooks from {}", paths.claude_settings.display()));
+        notes.push(format!(
+            "removed LIA hooks from {}",
+            paths.claude_settings.display()
+        ));
     }
     if paths.codex_config.exists() || codex_mcp_present(&codex_existing) {
         if let Some(parent) = paths.codex_config.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::write(&paths.codex_config, &codex_new)?;
-        notes.push(format!("removed LIA MCP from {}", paths.codex_config.display()));
+        notes.push(format!(
+            "removed LIA MCP from {}",
+            paths.codex_config.display()
+        ));
     }
     // Keep keys/journal by default (audit trail); only remove wrappers marker note.
     notes.push("LIA state dir retained (journal/keys); delete lia-home manually if desired".into());
@@ -626,7 +698,10 @@ pub fn status(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         notes.push("no install-manifest (not installed via lia install, or wiped)".into());
     }
     if !paths.lia_bin.exists() {
-        notes.push(format!("WARNING: lia binary missing at {}", paths.lia_bin.display()));
+        notes.push(format!(
+            "WARNING: lia binary missing at {}",
+            paths.lia_bin.display()
+        ));
     }
     Ok(InstallReport {
         action: "status".into(),
@@ -736,10 +811,16 @@ mod tests {
         let arr = m2.pointer("/hooks/PreToolUse").unwrap().as_array().unwrap();
         let lia_count = arr.iter().filter(|e| entry_is_lia_hook(e)).count();
         assert_eq!(lia_count, 1, "reinstall must not duplicate LIA hooks");
-        assert!(arr.iter().any(|e| e.get("matcher").and_then(|m| m.as_str()) == Some("Other")));
+        assert!(arr
+            .iter()
+            .any(|e| e.get("matcher").and_then(|m| m.as_str()) == Some("Other")));
         let u = unmerge_claude_settings(&m2).unwrap();
         assert!(!claude_hook_present(&u));
-        assert!(u.pointer("/hooks/PreToolUse").and_then(|a| a.as_array()).map(|a| !a.is_empty()).unwrap_or(false));
+        assert!(u
+            .pointer("/hooks/PreToolUse")
+            .and_then(|a| a.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false));
         assert_eq!(u.get("model").and_then(|v| v.as_str()), Some("x"));
     }
 
@@ -757,7 +838,8 @@ command = "/bin/true"
         assert!(m1.contains("mcp_servers.other"));
         let m2 = merge_codex_toml(&m1, "/tmp/codex-mcp.sh", &[]);
         assert_eq!(
-            m2.matches(&format!("[mcp_servers.{CODEX_MCP_SERVER}]")).count(),
+            m2.matches(&format!("[mcp_servers.{CODEX_MCP_SERVER}]"))
+                .count(),
             1
         );
         let u = unmerge_codex_toml(&m2);
@@ -807,7 +889,11 @@ command = "/bin/true"
         let settings: Value =
             serde_json::from_str(&fs::read_to_string(claude_home.join("settings.json")).unwrap())
                 .unwrap();
-        let arr = settings.pointer("/hooks/PreToolUse").unwrap().as_array().unwrap();
+        let arr = settings
+            .pointer("/hooks/PreToolUse")
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert_eq!(arr.iter().filter(|e| entry_is_lia_hook(e)).count(), 1);
 
         let un = uninstall(&req).unwrap();
@@ -842,8 +928,12 @@ command = "/bin/true"
     #[test]
     fn kernel_boundary_forbids_confine_claim() {
         let k = KernelBoundary::default();
-        assert!(k.assurance.contains("GATE"));
-        assert!(k.assurance.contains("CONFINE") || k.cannot_observe.iter().any(|s| s.contains("CONFINE")));
+        assert!(k.assurance.contains("UNMEASURED"));
+        assert!(!k.assurance.contains("PREVENT"));
+        assert!(
+            k.assurance.contains("CONFINE")
+                || k.cannot_observe.iter().any(|s| s.contains("CONFINE"))
+        );
         assert!(!k.includes.is_empty());
     }
 }

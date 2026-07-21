@@ -14,6 +14,8 @@ lia-policy = { workspace = true }
 lia-verify = { workspace = true }
 lia-ast = { workspace = true }
 lia-taint = { workspace = true }
+lia-ground = { workspace = true }
+lia-syco = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

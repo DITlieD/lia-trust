@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 
 use crate::assurance::{AssuranceReport, CapabilityProbe};
 use crate::contracts::{
-    MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS, MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES,
-    MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
+    MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
+    MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
 };
 use crate::AdapterError;
 
@@ -130,10 +130,7 @@ fn explain_denial(args: &Value, ctx: &InspectionContext) -> Result<Value, Adapte
         .last_denials
         .iter()
         .filter(|d| {
-            reason
-                .as_ref()
-                .map(|r| &d.reason_code == r)
-                .unwrap_or(true)
+            reason.as_ref().map(|r| &d.reason_code == r).unwrap_or(true)
                 && action_id
                     .as_ref()
                     .map(|a| &d.action_id == a)
@@ -165,7 +162,8 @@ fn show_policy(args: &Value, ctx: &InspectionContext) -> Result<Value, AdapterEr
         .map(PathBuf::from)
         .or_else(|| ctx.policy_path.clone())
         .ok_or_else(|| AdapterError::Invalid("show_policy needs policy".into()))?;
-    let frozen = freeze_policy_from_path(&path).map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    let frozen =
+        freeze_policy_from_path(&path).map_err(|e| AdapterError::Invalid(e.to_string()))?;
     Ok(json!({
         "content": [{"type": "text", "text": format!("policy_id={} hash={}", frozen.policy_id, frozen.policy_hash)}],
         "isError": false,
@@ -197,6 +195,7 @@ fn show_adapter_capabilities(args: &Value, ctx: &InspectionContext) -> Result<Va
         None => CapabilityProbe {
             adapter: adapter.clone(),
             keys: BTreeMap::new(),
+            gate_cells: BTreeMap::new(),
             probed_at: None,
             notes: vec!["no probe file; empty capabilities".into()],
         },

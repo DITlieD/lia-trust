@@ -79,7 +79,9 @@ pub fn assert_adapter(
     let suite_root = suite_root.as_ref();
     let suite = load_suite(suite_root.join("SUITE.json"))?;
     if !suite.frozen {
-        return Err(AdapterError::Invalid("conformance suite must be frozen".into()));
+        return Err(AdapterError::Invalid(
+            "conformance suite must be frozen".into(),
+        ));
     }
     let truth_path = resolve_truth(suite_root, &suite.assurance_truth)?;
     let mut results = Vec::new();
@@ -223,12 +225,11 @@ fn run_mcp_case(case: &ConformanceCase) -> Result<CaseResult, AdapterError> {
         adapter: Some(ADAPTER_CODEX.into()),
         last_denials: vec![],
     };
-    let raw = serde_json::to_string(&case.input).map_err(|e| AdapterError::Invalid(e.to_string()))?;
+    let raw =
+        serde_json::to_string(&case.input).map_err(|e| AdapterError::Invalid(e.to_string()))?;
     let response = handle_jsonrpc(&raw, &ctx, &inspect)?;
     let lia = response.pointer("/result/lia");
-    let allowed = lia
-        .and_then(|v| v.get("allowed"))
-        .and_then(|v| v.as_bool());
+    let allowed = lia.and_then(|v| v.get("allowed")).and_then(|v| v.as_bool());
     let mut ok = true;
     let mut detail = String::new();
     if let Some(exp) = case.expect.allowed {
@@ -282,7 +283,8 @@ fn run_action_case(case: &ConformanceCase) -> Result<CaseResult, AdapterError> {
         kind: serde_json::from_value(Value::String(kind.into()))
             .map_err(|e| AdapterError::Invalid(e.to_string()))?,
         action_id: Uuid::new_v4(),
-        payload: serde_json::from_value(payload).map_err(|e| AdapterError::Invalid(e.to_string()))?,
+        payload: serde_json::from_value(payload)
+            .map_err(|e| AdapterError::Invalid(e.to_string()))?,
     };
     let outcomes = evaluate_generic_action(&action, &cfg)?;
     let mut ok = true;
@@ -321,10 +323,7 @@ fn run_assurance_case(
         let expected = truth
             .get(adapter)
             .ok_or_else(|| AdapterError::Invalid(format!("truth missing {adapter}")))?;
-        let want_level = expected
-            .get("level")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let want_level = expected.get("level").and_then(|v| v.as_str()).unwrap_or("");
         let got_level = match report.level {
             AssuranceLevel::Audit => "AUDIT",
             AssuranceLevel::Observe => "OBSERVE",
@@ -371,26 +370,75 @@ fn run_assurance_case(
 
 fn frozen_probe(adapter: &str) -> CapabilityProbe {
     let mut keys = BTreeMap::new();
+    let mut gate_cells = BTreeMap::new();
     match adapter {
-        ADAPTER_CLAUDE_CODE | ADAPTER_CODEX => {
+        ADAPTER_CLAUDE_CODE => {
             keys.insert(CAP_PRE_WRITE_BLOCK.into(), true);
             keys.insert(CAP_POST_WRITE_RECEIPT.into(), true);
             keys.insert(CAP_SHELL_PRE_BLOCK.into(), true);
-            keys.insert(CAP_SHELL_RESULT_CAPTURE.into(), true);
-            keys.insert(CAP_COMPLETION_GATE.into(), true);
-            keys.insert(CAP_SUBAGENT_VISIBILITY.into(), adapter == ADAPTER_CLAUDE_CODE);
+            keys.insert(CAP_SHELL_RESULT_CAPTURE.into(), false);
+            keys.insert(CAP_COMPLETION_GATE.into(), false);
+            keys.insert(CAP_SUBAGENT_VISIBILITY.into(), true);
             keys.insert(CAP_IMMUTABLE_JOURNAL.into(), true);
             keys.insert(CAP_OFFLINE_VERIFICATION.into(), true);
+            for gate in [
+                "test-integrity",
+                "evidence-completeness",
+                "dependency-reality",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::CannotObserve);
+            }
+            for gate in [
+                "filesystem-scope",
+                "shell-irreversible",
+                "secret-output",
+                "journal-tamper",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::Prevent);
+            }
+        }
+        ADAPTER_CODEX => {
+            keys.insert(CAP_PRE_WRITE_BLOCK.into(), true);
+            keys.insert(CAP_POST_WRITE_RECEIPT.into(), true);
+            keys.insert(CAP_SHELL_PRE_BLOCK.into(), true);
+            keys.insert(CAP_SHELL_RESULT_CAPTURE.into(), false);
+            keys.insert(CAP_COMPLETION_GATE.into(), true);
+            keys.insert(CAP_SUBAGENT_VISIBILITY.into(), false);
+            keys.insert(CAP_IMMUTABLE_JOURNAL.into(), true);
+            keys.insert(CAP_OFFLINE_VERIFICATION.into(), true);
+            gate_cells.insert("test-integrity".into(), GateCell::CannotObserve);
+            for gate in [
+                "evidence-completeness",
+                "filesystem-scope",
+                "shell-irreversible",
+                "dependency-reality",
+                "secret-output",
+                "journal-tamper",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::Prevent);
+            }
         }
         _ => {
             keys.insert(CAP_POST_WRITE_RECEIPT.into(), true);
             keys.insert(CAP_IMMUTABLE_JOURNAL.into(), true);
             keys.insert(CAP_OFFLINE_VERIFICATION.into(), true);
+            for gate in [
+                "test-integrity",
+                "evidence-completeness",
+                "shell-irreversible",
+                "dependency-reality",
+                "secret-output",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::CannotObserve);
+            }
+            gate_cells.insert("filesystem-scope".into(), GateCell::Detect);
+            gate_cells.insert("journal-tamper".into(), GateCell::Prevent);
         }
     }
     CapabilityProbe {
         adapter: adapter.into(),
         keys,
+        gate_cells,
         probed_at: None,
         notes: vec!["conformance frozen probe".into()],
     }

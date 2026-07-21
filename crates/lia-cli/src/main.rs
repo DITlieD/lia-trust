@@ -5,11 +5,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{
-    assert_adapter, default_claude_home, default_codex_home, default_lia_home, evaluate_generic_action,
-    evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin, install as install_kernel,
-    known_adapters, looks_like_live_user_home, report_for_adapter, serve_mcp_stdio,
-    status as install_status, uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction,
-    InspectionContext, InstallRequest, RunContext, WrapOptions,
+    assert_adapter, default_claude_home, default_codex_home, default_lia_home,
+    evaluate_generic_action, evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin,
+    install as install_kernel, known_adapters, looks_like_live_user_home, report_for_adapter,
+    serve_mcp_stdio, status as install_status, uninstall as uninstall_kernel, wrap, DenialRecord,
+    GenericAction, InspectionContext, InstallRequest, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
@@ -24,9 +24,7 @@ use lia_ground::{
     verify_claim_with_id, GroundContext, GROUND_GATE_ID,
 };
 use lia_journal::{append_signed, verify_chain, Journal, SigningIdentity};
-use lia_policy::{
-    evaluate_frozen, freeze_policy_from_path, load_evidence_json, EvidenceSet,
-};
+use lia_policy::{evaluate_frozen, freeze_policy_from_path, load_evidence_json, EvidenceSet};
 use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
 use lia_taint::{check_flows, parse_graph};
@@ -60,9 +58,7 @@ enum Commands {
         run_id: Option<Uuid>,
     },
     #[command(name = "journal-verify")]
-    JournalVerify {
-        db: PathBuf,
-    },
+    JournalVerify { db: PathBuf },
     Gate {
         #[arg(long)]
         rules: Option<PathBuf>,
@@ -492,8 +488,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             };
             let mut report = lia_verify::verify_bundle_with_anchor(&bundle, anchor.as_ref())?;
             if let Some(secret) = verifier_secret_key_hex {
-                let identity =
-                    SigningIdentity::from_secret_key_hex(verifier_key_id, &secret)?;
+                let identity = SigningIdentity::from_secret_key_hex(verifier_key_id, &secret)?;
                 sign_verification_report(&mut report, &identity)?;
                 verify_report_signature(&report)?;
             }
@@ -526,8 +521,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             verifier_key_id,
             verifier_secret_key_hex,
         } => {
-            let journal_id =
-                SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+            let journal_id = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
             // The verifier key must be INDEPENDENT of the journal key: deriving it (an XOR
             // mask, a KDF, anything) means one leaked journal secret yields both, collapsing
             // the two-party separation. Absent an explicit verifier secret, draw fresh entropy.
@@ -555,14 +549,10 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             verifier_secret_key_hex,
             verifier_key_id,
         } => {
-            let journal_id = SigningIdentity::from_secret_key_hex(
-                journal_key_id,
-                &journal_secret_key_hex,
-            )?;
-            let verifier_id = SigningIdentity::from_secret_key_hex(
-                verifier_key_id,
-                &verifier_secret_key_hex,
-            )?;
+            let journal_id =
+                SigningIdentity::from_secret_key_hex(journal_key_id, &journal_secret_key_hex)?;
+            let verifier_id =
+                SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret_key_hex)?;
             let (path, run_id) = build_demo_bundle(&out, &journal_id, &verifier_id)?;
             println!("{}", serde_json::json!({"bundle": path, "run_id": run_id}));
             Ok(ExitCode::SUCCESS)
@@ -1008,11 +998,7 @@ fn dispatch_gate_request(
         }
         AST_GATE_ID => {
             let opts = ScanOptions {
-                manifest_packages: req
-                    .payload
-                    .new_dependencies
-                    .clone()
-                    .unwrap_or_default(),
+                manifest_packages: req.payload.new_dependencies.clone().unwrap_or_default(),
                 language: None,
             };
             let report = if let Some(diff) = req.payload.text.as_ref() {
@@ -1317,7 +1303,12 @@ fn run_mcp(
         serve_mcp_stdio(&run_ctx, &inspect_ctx).map_err(|e| e.to_string())?;
         return Ok(ExitCode::SUCCESS);
     }
-    let raw = request.expect("checked is_some");
+    let raw = request.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "one-shot MCP mode requires --request",
+        )
+    })?;
     let response = handle_jsonrpc(&raw, &run_ctx, &inspect_ctx)?;
     println!("{}", serde_json::to_string(&response)?);
     if response.get("error").is_some() {
@@ -1439,20 +1430,13 @@ fn exit_for_outcomes(outcomes: &[GateOutcome]) -> ExitCode {
 
 fn load_gate_evidence(path: &std::path::Path) -> Result<EvidenceSet, Box<dyn std::error::Error>> {
     if path.is_dir() {
-        let candidates = [
-            path.join("evidence-set.json"),
-            path.join("evidence.json"),
-        ];
+        let candidates = [path.join("evidence-set.json"), path.join("evidence.json")];
         for c in &candidates {
             if c.is_file() {
                 return Ok(load_evidence_json(c)?);
             }
         }
-        return Err(format!(
-            "bundle dir {} has no evidence-set.json",
-            path.display()
-        )
-        .into());
+        return Err(format!("bundle dir {} has no evidence-set.json", path.display()).into());
     }
     Ok(load_evidence_json(path)?)
 }
@@ -1526,10 +1510,7 @@ fn run_bench(
     }
 }
 
-fn run_claims_lint(
-    root: PathBuf,
-    json: bool,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_claims_lint(root: PathBuf, json: bool) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let findings = claims_lint(&root)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&findings)?);
@@ -1566,8 +1547,7 @@ fn run_verify_run(
         Some(s) => s,
         None => lia_journal::random_secret_hex()?,
     };
-    let verifier_id =
-        SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;
+    let verifier_id = SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;
     let (bundle, run_id) = verify_run(&VerifyRunOptions {
         repo: &repo,
         base: &base,
@@ -1610,7 +1590,12 @@ fn run_conform(
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
         for r in &report.results {
-            println!("{}: {} ({})", r.id, if r.ok { "PASS" } else { "FAIL" }, r.detail);
+            println!(
+                "{}: {} ({})",
+                r.id,
+                if r.ok { "PASS" } else { "FAIL" },
+                r.detail
+            );
         }
         println!(
             "suite={} passed={} failed={}",

@@ -77,7 +77,7 @@ to decide that a deletion is legitimate.
 | L1 | Frozen rules-as-data, stable reasons, fail-closed policy | `lia-policy`; policy and gate reason-code locks | SHIPPED | policy/golden tests plus malformed/missing-policy CLI cases | M6 reproof |
 | L2 | Seven deterministic core gates | seven `lia-gates` modules and dispatch mapping | SHIPPED | adversarial fixtures, compiled CLI, journal/verify proof for each class | M2/M6 reproof |
 | L3 | Thin adapters plus capability-derived assurance | Claude hook, Codex MCP proxy, generic wrap exist; Gemini/Cursor absent | PARTIAL | adapter conformance and probe-derived report for every shipped adapter | M4 |
-| L4 | Ground, syco, AST, taint with production consumers | crates/CLI/live bench exist; AST/taint helper is not on normal write dispatch; Terminus is shell-only | PARTIAL | real adapter reachability with signed result or claims corrected to cannot-observe | M2 |
+| L4 | Ground, syco, AST, taint with production consumers | Claude/Codex writes use central AST dispatch; Codex exposes signed ground/syco/taint paths; unsupported Terminus cells remain CANNOT-OBSERVE | SHIPPED | 8/8 production-path cases plus signed receipts and offline verification | M2 complete; M6 reproof |
 | L5 | Three-arm trust benchmark and utility companion | recorded corpora and scorecards exist; some live/utility lanes remain partial/deferred | PARTIAL | current frozen corpus replay, separated recorded/live metrics, optional external lanes labeled | M6 |
 | L6 | Conformance/action/docs/release pack | docs, action, conformance suite, README and `v0.1.0` tag exist; no prebuilt release artifact, sample-repo Action bundle, or different-machine verification evidence is present | PARTIAL | tagged prebuilt release, sample-repo Action bundle, and separately built/different-machine verification proof, or exact external blocker | M6 |
 | L7 | Post-release funding applications with claims discipline | `docs/programs.md`; no application action authorized | EXTERNAL-ONLY | local truthful templates/lint complete; actual submission remains owner/third-party action | M6 record |
@@ -94,18 +94,18 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P0-3 | cap identical deny loops | per-command/reason counters and `LIA_DENY_CAP` | SHIPPED | repeated-denial fixture stops forwarding and emits cap | M3 reproof |
 | P0-4 | quote-aware substitution detection | expansion tests and quote-aware scanner | SHIPPED | quoted backticks allow; executable substitution denies | M1/M6 |
 | P0-5 | lexical traversal normalization | `normalize_lexical` plus scope gate | SHIPPED | traversal/out-of-root property cases | M1/M6 |
-| P0-6 | durable Harbor journal | optional durable path exists, but fallback journal is temporary and failures can fail open | PARTIAL | default per-trial durable owner/lifecycle plus separate verifier | M2/M3 |
+| P0-6 | durable Harbor journal | Terminus now creates a per-trial external journal, verifies each chain, binds receipt to head and fails closed; rotation/cleanup remains | PARTIAL | M2 fail-closed proof complete; bounded lifecycle/rotation proof | M3 |
 | P0-7 | per-trial reason telemetry | `deny_by_reason` output histogram | SHIPPED | integration fixture contains stable reason histogram | M3 |
 | P1-1 | expanded destructive coverage | destructive pattern pack in `shell.rs` | SHIPPED | hard irreversible regression fixtures remain denied | M1/M6 |
 | P1-2 | modern secret patterns | expanded patterns in `secret.rs` | SHIPPED | adversarial secret pack and clean controls | M6 |
 | P1-3 | meaningful journal tamper probe | real verifier plus broken-chain fixtures | SHIPPED | event-byte/hash/signature mutation all fail offline | M6 |
 | P1-4 | destructive class parity in live arm | frozen trust corpus includes destructive class | SHIPPED | current scorecard class count/catch without pooling lanes | M6 |
 | P1-5 | 20-command destructive fixture pack | shell tests/bench fixtures | SHIPPED | all hard fixtures deny and benign controls allow | M1/M6 |
-| P1-10 | ground/syco wiring honesty | live trust loop wired; Terminus explicitly shell-only | PARTIAL | supported adapters consume gates, unsupported ones say cannot-observe | M2 |
-| P1-11 | AST write admission | helper and Harbor fixture exist; normal adapter writes do not invoke it | PARTIAL | real adapter write path blocks AST fixture and journals verdict | M2 |
-| P1-12 | taint admission | helper/CLI and corpus exist; normal adapter dispatch has no taint payload | PARTIAL | typed adapter action reaches taint gate and journals verdict | M2 |
+| P1-10 | ground/syco wiring honesty | explicit Codex proxy tools dispatch both gates with receipts; Terminus remains truthfully shell-only | SHIPPED | production denials plus unsupported-adapter CANNOT-OBSERVE cells | M2 complete; M6 reproof |
+| P1-11 | AST write admission | central production write dispatch scans supported source types; obsolete helper removed | SHIPPED | Codex write blocks `AST_EVAL`, journals it and verifies separately | M2 complete; M6 reproof |
+| P1-12 | taint admission | typed `taint_graph` reaches central dispatch; malformed graphs become signed denials | SHIPPED | malicious and malformed production cases both block with receipts | M2 complete; M6 reproof |
 | P1-13 | Claude/Codex measurement | recorded-adapter PREVENT measured; live OAuth agents unmeasured | PARTIAL | current recorded replay; live remains explicit external gate absent credentials | M6 |
-| P1-14 | completion admission | `CompleteTask` dispatch exists in Codex proxy; not every harness exposes completion | PARTIAL | real supported completion entrypoint denies missing evidence; capability cells honest | M2 |
+| P1-14 | completion admission | Codex `complete_task` blocks `Incomplete`; Claude/generic/Terminus lack completion channels and say CANNOT-OBSERVE | SHIPPED | supported production entrypoint denial plus exact per-adapter cells | M2 complete; M6 reproof |
 | P1-20 | utility token tax bound | TB2 subset meets bound; Claw full rerun deferred | PARTIAL | local regression proof; external/full rerun precisely labeled | M3/M6 |
 | P1-21 | Claw contingency | `claw-utility-contingency.md` | SHIPPED | claims lint and document consistency | M6 |
 | P1-22 | policy-approved in-root `rm -rf` | V2 `cleanup_policy` exact-target gate, compiled CLI test, signed journal and offline verifier | SHIPPED | 4/4 cleanup CLI tests, 17/17 shell fixtures, hard-denial regression matrix | M1 complete; M6 reproof |
@@ -115,13 +115,13 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P2-4 | bounded shareable journal | `shareable_anchors` and verifier support | SHIPPED | truncated anchored bundle verifies; tamper fails | M3/M6 |
 | P2-5 | duplicate-command memo | `_decision_memo` | SHIPPED | duplicate fixture avoids respawn; invalidation rules proven | M3 |
 | P2-10 | L6 docs pack | required public documents now present | SHIPPED | claims lint and file checklist | M6 |
-| P2-11 | assurance drift prevention | capability-derived report exists, but probes assert capabilities the production paths do not prove: generic wrap discards its `RunContext`, and Claude PreToolUse cannot observe shell results or completion | PARTIAL | probes derive only runtime-proven cells; generic journal exists/verifies; Claude result/completion cells remain false without an observing boundary | M2/M5/M6 |
+| P2-11 | assurance drift prevention | runtime probe executes real boundaries, signed rows, independent generic diff, clean verify and negative tamper; install is UNMEASURED | SHIPPED | 3/3 runtime probes match downward-only truth; defaults are AUDIT/CANNOT-OBSERVE | M2 complete; M6 reproof |
 | P2-12 | IS-5 publish path | local action definition, local smoke, and v0.1.0 tag only; no release workflow/prebuilt artifact/sample-repo bundle/different-machine verification evidence | PARTIAL | local prerequisites pass and missing remote/cross-machine proof is either obtained or recorded as an exact external gate | M6 |
 | P2-13 | license/advisory checks | `deny.toml`, license policy/scripts | SHIPPED | current dependency audit/license checks | M6 |
 | P2-14 | wire coverage | wire map/check/action | SHIPPED | final wire checker | M6 |
 | P2-15 | claims separation | `claims.json` separates recorded/live/utility | SHIPPED | claims lint and manual final reconciliation | M6 |
 | P2-16 | ground symbol depth | improved symbol matching and fixtures | SHIPPED | positive/negative symbol cases | M6 |
-| P2-17 | HL-4 wrapper digest on Terminus tests | helper observation exists; Terminus never identifies/runs test gate | PARTIAL | applicable command result becomes wrapper observation and signed test verdict | M2 |
+| P2-17 | HL-4 wrapper digest on Terminus tests | Terminus has no per-command result/exit channel; dead helper was removed instead of presenting caller data as wrapper evidence | OBSOLETE-BY-LATER-DESIGN | Terminus test-integrity remains CANNOT-OBSERVE; no fabricated HL-4 path remains | M2 complete |
 | P3-1 | second free-model utility lane | local driver exists; actual second-model execution is deferred | PARTIAL | local lane configuration validated; run remains explicitly gated on external model/service availability and cost | M6 |
 | P3-2 | Claw companion signal | documented companion metric | SHIPPED | claims remain non-product and non-pooled | M6 |
 | P3-3 | AST/taint corpus classes | corpus and runner classes exist | SHIPPED | current by-class replay | M2/M6 |
@@ -148,7 +148,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | threat model | signing identity outside agent principal | key file shares user identity today | PARTIAL | brokered FD/process boundary and file-permission checks; OS principal separation external | M5 |
 | threat model | credential broker | capability false, env allowlist still includes credential-adjacent vars | MISSING | secret-minimized child environment and scoped credential delivery/expiry | M5 |
 | threat model | live registry dependency evidence | fixture snapshots only | MISSING | bounded client, pinned response evidence, offline/cache semantics, timeout | M4 |
-| threat model | persistent evidence outside writable worktree | generic wrap reserves an external journal path but discards its `RunContext` and emits no row; hook install shares user home | PARTIAL | per-adapter production journal, ownership/lifecycle and tamper proof; OS principal separation honest | M2/M5 |
+| threat model | persistent evidence outside writable worktree | generic wrap signs process/diff events externally; Terminus uses per-trial external evidence; hook install still shares user identity | PARTIAL | M2 persistence/tamper proof complete; separate-principal ownership remains | M5 |
 
 ## Discrepancy map
 
@@ -158,8 +158,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | “41/41 done” includes documentation-only deferrals | six security/product behaviors remain absent or partial | preserve historical score but use this implementation ledger for V2 |
 | L4 components exist | existence/CLI reachability is broader than normal adapter enforcement | wire supported production paths or lower capability claims in M2 |
 | Terminus has a durable-journal option | default fallback can be temporary and error paths fail open | make lifecycle explicit and fail closed in M2/M3 |
-| Generic wrap reports a journal path and its probe asserts immutable/offline evidence | `generic::wrap` constructs then discards `RunContext`; no journal row is produced | create and verify production-path journal evidence in M2; lower probe cells until proven |
-| Claude install probe asserts shell-result capture and completion gate | PreToolUse observes neither command results nor a completion event | set cells false unless a separately verified observing boundary is added in M2/M6 |
+| Generic wrap reports a journal path and its probe asserts immutable/offline evidence | M2 writes signed attempted/observed/diff rows outside the worktree and verifies clean/tampered copies | resolved locally; lifecycle/rotation continues in M3 |
+| Claude install probe asserts shell-result capture and completion gate | install is now UNMEASURED; runtime probe keeps both cells CANNOT-OBSERVE | resolved; a future observing boundary must earn any stronger cell |
 | V1 assurance intentionally caps at GATE | V2 roadmap asks for CONFINE | add an opt-in, probe-proven backend; never raise unsupported adapters in M5 |
 | recorded Claude/Codex lanes say PREVENT | no live OAuth agent measurement | retain recorded label; external live gate stays open in M6 |
 | generic wrap says isolated worktree | it is not process/network confinement | preserve current honesty; only a namespace backend may claim CONFINE |
@@ -243,8 +243,58 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M2 — production trust wiring
 
-- State: pending
+- State: `MILESTONE_AUDITING` (independent PASS; awaiting commit)
+- Timestamp: `2026-07-22T04:51:46+09:00`
+- Starting HEAD: `fd664e1e34e9cf2821b1f08ee5d76ca7a5ded366`
 - Requirements: P0-6, P1-10/11/12/14, P2-17, persistent adapter evidence
+- RED evidence: independent auditor compiled and ran
+  `cargo test -p lia-cli --test production_trust_paths`; 0/7 tests passed as expected. Each test
+  independently reached the production CLI/adapter boundary and exposed one missing behavior:
+  generic wrap emitted no journal; Codex write admitted AST `eval`; a separate Codex write admitted
+  a valid untrusted-to-destructive taint graph; `ground_claim` and `check_agreement` were unknown
+  proxy tools; `EVIDENCE_INCOMPLETE` returned `allowed:true`; and probe-supplied per-gate cells were
+  ignored. `rustfmt --check` passed and the auditor found no malformed fixture or setup failure.
+- Completed behavior: generic wrap signs attempted/observed/final-diff events outside the child
+  worktree; central adapter dispatch emits signed AST/taint/ground/syco outcomes; `Incomplete` and
+  `Unsupported` block; Codex exposes explicit grounding/agreement tools and survives malformed framed
+  calls with a signed `ADAPTER_INVALID_INPUT`; install output is UNMEASURED; runtime assurance probes
+  earn each cell through production denials/diff evidence, clean chain verification and negative
+  tamper checks. Terminus now uses an external per-trial journal, random per-instance signing secret,
+  bounded gate/verifier timeouts, deny-only memoization, fail-closed protocol handling, clean offline
+  verification and exact returned-receipt/journal-head binding.
+- Architectural decisions: caller-supplied Codex `run_test` data is not wrapper evidence, so Codex
+  test-integrity remains CANNOT-OBSERVE. Claude PreToolUse cannot see test results, completion or
+  dependency operations. Terminus cannot see per-command exit status, so the dead HL-4/completion
+  helpers were removed and those cells remain CANNOT-OBSERVE instead of fabricating evidence.
+- Files changed: `Cargo.lock`; `lia-gates` payload schema; `lia-adapters` Cargo/dispatch/Codex/generic/
+  assurance/install/conformance/inspection surfaces; CLI MCP boundary and install smoke;
+  `production_trust_paths.rs`; `bench/harbor/lia_decision.py`, Terminus integration and seven unit
+  cases; assurance truth/probe/docs; this handoff.
+- Dependencies: internal workspace dependencies `lia-ground` and `lia-syco` added to `lia-adapters`;
+  no new external package.
+- Current assurance ceiling: `GATE` only for explicitly observed hook/proxy gates. Claude test and
+  completion cells, Codex test-integrity, and generic test/completion/shell/dependency/secret cells
+  are CANNOT-OBSERVE; generic filesystem remains DETECT. No adapter claims CONFINE.
+- GREEN evidence: final independent audit PASS. `cargo test --workspace --no-fail-fast` passed
+  117/117; production trust paths 8/8; `lia-adapters` 18/18; Terminus decision tests 7/7; install
+  smoke 1/1; runtime assurance probes 3/3. `cargo check --workspace`, targeted rustfmt,
+  `git diff --check`, gate freeze and wire checks all passed. Claude produced three real denials and
+  five signed rows; Codex five denials and seven rows; generic a real `touched.txt`, independently
+  matching diff digest and three rows. Every clean chain verified and every mutated copy failed.
+- Production review: no new direct panic/expect/unwrap/todo/unimplemented/unreachable/unsafe in
+  production. Invalid quality payloads become signed denial outcomes and a malformed MCP call does
+  not terminate the following frame. Obsolete unit-only AST/taint helpers were removed so wire check
+  proves the central production consumer.
+- Off-agent evidence: RED, intermediate BLOCK and final PASS verdicts from `m2_auditor`, plus the
+  Terminus fail-closed PASS from `terminus_red_auditor`, are transcribed here; no separate report file
+  was emitted.
+- Retained limitations: probe JSON remains operator-supplied and unsigned, so reports are operational
+  summaries rather than attestations; a live Harbor/Terminus run was not available. The unchanged
+  contract parser contains one pre-existing panic. There is still no complete mediation, native Codex
+  tool interception, network confinement, credential broker or separate OS principal.
+- Next action: commit M2, record its hash, then begin M3 with RED lifecycle/timeout/cache/telemetry
+  fixtures. Rotation, cleanup and stale-resource recovery remain M3 work.
+- Blocker: none.
 - Commit: pending
 
 ### M3 — telemetry, recovery, performance, lifecycle

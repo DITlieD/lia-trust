@@ -7,12 +7,16 @@ use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 use crate::contracts::{
-    MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS, MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES,
-    MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN, MCP_JSONRPC, MCP_METHOD_CALL, MCP_METHOD_LIST,
-    MCP_PARAM_ARGUMENTS, MCP_PARAM_NAME, PROXY_TOOL_ADD_DEPENDENCY, PROXY_TOOL_COMPLETE_TASK,
-    PROXY_TOOL_DELETE_FILE, PROXY_TOOL_RUN_TEST, PROXY_TOOL_SHELL, PROXY_TOOL_WRITE_FILE,
+    MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
+    MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
+    MCP_JSONRPC, MCP_METHOD_CALL, MCP_METHOD_LIST, MCP_PARAM_ARGUMENTS, MCP_PARAM_NAME,
+    PROXY_TOOL_ADD_DEPENDENCY, PROXY_TOOL_CHECK_AGREEMENT, PROXY_TOOL_COMPLETE_TASK,
+    PROXY_TOOL_DELETE_FILE, PROXY_TOOL_GROUND_CLAIM, PROXY_TOOL_RUN_TEST, PROXY_TOOL_SHELL,
+    PROXY_TOOL_WRITE_FILE,
 };
-use crate::dispatch::{denial_summary, dispatch_action, DispatchResult, RunContext};
+use crate::dispatch::{
+    denial_summary, dispatch_action, dispatch_rejection, DispatchResult, RunContext,
+};
 use crate::mcp_inspection::{handle_inspection_call, InspectionContext};
 use crate::mcp_stdio::{read_framed_message, write_framed_message};
 use crate::AdapterError;
@@ -48,6 +52,8 @@ pub fn proxy_tool_names() -> &'static [&'static str] {
         PROXY_TOOL_RUN_TEST,
         PROXY_TOOL_COMPLETE_TASK,
         PROXY_TOOL_ADD_DEPENDENCY,
+        PROXY_TOOL_GROUND_CLAIM,
+        PROXY_TOOL_CHECK_AGREEMENT,
     ]
 }
 
@@ -209,9 +215,17 @@ pub fn proxy_tool_call(
     args: &Value,
     ctx: &RunContext,
 ) -> Result<ProxyCallResult, AdapterError> {
-    let (kind, payload) = map_proxy_args(name, args)?;
     let action_id = Uuid::new_v4();
-    let result = dispatch_action(kind, action_id, payload, ctx).map_err(AdapterError::from)?;
+    let result = match map_proxy_args(name, args) {
+        Ok((kind, payload)) => {
+            dispatch_action(kind, action_id, payload, ctx).map_err(AdapterError::from)?
+        }
+        Err(AdapterError::Invalid(detail)) => {
+            dispatch_rejection(action_id, "ADAPTER_INVALID_INPUT", &detail, ctx)
+                .map_err(AdapterError::from)?
+        }
+        Err(error) => return Err(error),
+    };
     if result.allowed {
         let response = rpc_result(
             id,
@@ -261,6 +275,7 @@ fn map_proxy_args(name: &str, args: &Value) -> Result<(ActionKind, GatePayload),
                         .get("content")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string()),
+                    taint_graph: args.get("taint_graph").cloned(),
                     ..GatePayload::default()
                 },
             ))
@@ -362,7 +377,35 @@ fn map_proxy_args(name: &str, args: &Value) -> Result<(ActionKind, GatePayload),
                 },
             ))
         }
-        other => Err(AdapterError::Invalid(format!("unknown proxy tool: {other}"))),
+        PROXY_TOOL_GROUND_CLAIM => {
+            let claim = args
+                .get("claim")
+                .cloned()
+                .ok_or_else(|| AdapterError::Invalid("ground_claim needs claim".into()))?;
+            Ok((
+                ActionKind::Other,
+                GatePayload {
+                    ground_claim: Some(claim),
+                    ..GatePayload::default()
+                },
+            ))
+        }
+        PROXY_TOOL_CHECK_AGREEMENT => {
+            let exchange = args
+                .get("exchange")
+                .cloned()
+                .ok_or_else(|| AdapterError::Invalid("check_agreement needs exchange".into()))?;
+            Ok((
+                ActionKind::Other,
+                GatePayload {
+                    syco_exchange: Some(exchange),
+                    ..GatePayload::default()
+                },
+            ))
+        }
+        other => Err(AdapterError::Invalid(format!(
+            "unknown proxy tool: {other}"
+        ))),
     }
 }
 
@@ -440,7 +483,8 @@ mod tests {
         let resp = handle_jsonrpc(&raw, &ctx, &insp).unwrap();
         assert!(resp.get("error").is_none(), "{resp}");
         assert_eq!(
-            resp.pointer("/result/serverInfo/name").and_then(|v| v.as_str()),
+            resp.pointer("/result/serverInfo/name")
+                .and_then(|v| v.as_str()),
             Some(MCP_SERVER_NAME)
         );
         assert_eq!(
@@ -507,7 +551,9 @@ mod tests {
         let init_v: Value = serde_json::from_str(&init).unwrap();
         assert!(init_v.get("error").is_none(), "{init_v}");
         assert_eq!(
-            init_v.pointer("/result/serverInfo/name").and_then(|v| v.as_str()),
+            init_v
+                .pointer("/result/serverInfo/name")
+                .and_then(|v| v.as_str()),
             Some("lia-trust")
         );
 
@@ -526,10 +572,74 @@ mod tests {
             Some(true)
         );
         assert_eq!(
-            call_v.pointer("/result/lia/allowed").and_then(|v| v.as_bool()),
+            call_v
+                .pointer("/result/lia/allowed")
+                .and_then(|v| v.as_bool()),
             Some(false)
         );
         // notifications produce no frames — only 3 responses
         assert!(read_framed_message(&mut out).unwrap().is_none());
+    }
+
+    #[test]
+    fn malformed_tool_call_is_receipted_and_session_survives() {
+        let root = tempfile::tempdir().unwrap();
+        let mut ctx = ctx_root(root.path().to_path_buf());
+        ctx.journal_path = Some(root.path().join("adapter-input.db"));
+        ctx.secret_key_hex = Some("77".repeat(32));
+        ctx.key_id = Some("adapter-input-test".into());
+        let insp = inspect();
+
+        let mut input = Vec::new();
+        input.extend(
+            frame_json(&json!({
+                "jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":"write_file","arguments":{"content":"missing path"}}
+            }))
+            .unwrap(),
+        );
+        input.extend(
+            frame_json(&json!({
+                "jsonrpc":"2.0","id":2,"method":"tools/call",
+                "params":{"name":"delete_file","arguments":{"path":"/tmp/outside-after-invalid"}}
+            }))
+            .unwrap(),
+        );
+
+        let mut reader = Cursor::new(input);
+        let mut writer = Vec::new();
+        serve_mcp_stdio_io(&mut reader, &mut writer, &ctx, &insp).unwrap();
+
+        let mut out = Cursor::new(writer);
+        let malformed: Value =
+            serde_json::from_str(&read_framed_message(&mut out).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            malformed
+                .pointer("/result/isError")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert!(malformed
+            .pointer("/result/lia/outcomes")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .any(|outcome| outcome["reason_code"] == "ADAPTER_INVALID_INPUT"));
+        assert!(!malformed
+            .pointer("/result/lia/journal_receipts")
+            .and_then(Value::as_array)
+            .unwrap()
+            .is_empty());
+
+        let second: Value =
+            serde_json::from_str(&read_framed_message(&mut out).unwrap().unwrap()).unwrap();
+        assert!(second
+            .pointer("/result/lia/outcomes")
+            .and_then(Value::as_array)
+            .unwrap()
+            .iter()
+            .any(|outcome| outcome["reason_code"] == "FS_OUT_OF_SCOPE"));
+        assert!(read_framed_message(&mut out).unwrap().is_none());
+        lia_journal::verify_chain(ctx.journal_path.as_ref().unwrap()).unwrap();
     }
 }

@@ -8,12 +8,17 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use chrono::Utc;
 use lia_gates::GateConfig;
+use lia_journal::{append_signed, Journal, SigningIdentity};
+use lia_protocol::{
+    ActionAttempted, ActionKind, ActionObserved, ActionPayload, Event, EvidenceCaptured,
+    RawHarnessEvent,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::dispatch::RunContext;
 use crate::AdapterError;
 
 const DEFAULT_ENV_ALLOWLIST: &[&str] = &[
@@ -92,6 +97,33 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
             ));
         }
     }
+    let identity = SigningIdentity::from_secret_key_hex(opts.key_id.clone(), &opts.secret_key_hex)?;
+    let journal = if journal_path.exists() {
+        Journal::open(&journal_path)?
+    } else {
+        Journal::create(&journal_path)?
+    };
+    let action_id = Uuid::new_v4();
+    append_signed(
+        &journal,
+        opts.run_id,
+        Event::ActionAttempted(ActionAttempted {
+            action_id,
+            kind: ActionKind::Other,
+            payload: ActionPayload {
+                command: None,
+                path: None,
+                content_sha256: None,
+                argv: Some(opts.agent_argv.clone()),
+                cwd: Some(worktree.display().to_string()),
+                package: None,
+                version: None,
+                claim: Some("generic wrapped agent process".into()),
+            },
+            timestamp: Utc::now(),
+        }),
+        &identity,
+    )?;
 
     let stop = Arc::new(AtomicBool::new(false));
     let detect_log = opts.evidence_dir.join("detect_events.jsonl");
@@ -99,15 +131,19 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         let stop_c = Arc::clone(&stop);
         let root = worktree.clone();
         let log_path = detect_log.clone();
-        Some(thread::spawn(move || watch_detect_only(root, log_path, stop_c)))
+        Some(thread::spawn(move || {
+            watch_detect_only(root, log_path, stop_c)
+        }))
     } else {
         None
     };
 
-    let allow = opts
-        .env_allowlist
-        .clone()
-        .unwrap_or_else(|| DEFAULT_ENV_ALLOWLIST.iter().map(|s| (*s).to_string()).collect());
+    let allow = opts.env_allowlist.clone().unwrap_or_else(|| {
+        DEFAULT_ENV_ALLOWLIST
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect()
+    });
     let child_env = filter_env(&allow);
 
     let mut cmd = Command::new(&opts.agent_argv[0]);
@@ -121,27 +157,67 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let status = cmd
-        .status()
-        .map_err(|e| AdapterError::Invalid(format!("failed to spawn agent: {e}")))?;
-    let agent_exit = status.code().unwrap_or(1);
+    let status_result = cmd.status();
 
     stop.store(true, Ordering::SeqCst);
     if let Some(handle) = watcher {
-        let _ = handle.join();
+        handle
+            .join()
+            .map_err(|_| AdapterError::Invalid("detect watcher panicked".into()))?;
     }
+    let status = match status_result {
+        Ok(status) => status,
+        Err(error) => {
+            append_signed(
+                &journal,
+                opts.run_id,
+                Event::RawHarness(RawHarnessEvent {
+                    harness: "generic".into(),
+                    raw: serde_json::json!({
+                        "action_id": action_id,
+                        "reason_code": "GENERIC_AGENT_SPAWN_FAILED",
+                        "error": error.to_string(),
+                    }),
+                    timestamp: Utc::now(),
+                }),
+                &identity,
+            )?;
+            return Err(AdapterError::Invalid(format!(
+                "failed to spawn agent: {error}"
+            )));
+        }
+    };
+    let agent_exit = status.code().unwrap_or(1);
+    append_signed(
+        &journal,
+        opts.run_id,
+        Event::ActionObserved(ActionObserved {
+            action_id,
+            exit_code: Some(agent_exit),
+            stdout_sha256: None,
+            stderr_sha256: None,
+            coverage_profraw_sha256: None,
+            wrapper_digest_sha256: None,
+            timestamp: Utc::now(),
+        }),
+        &identity,
+    )?;
 
     let detect_events = read_detect_events(&detect_log);
-    let final_diff_sha256 = compute_worktree_diff_sha(&repo_canon, &worktree).ok();
-
-    let _ctx = RunContext {
-        run_id: opts.run_id,
-        config: opts.config,
-        journal_path: Some(journal_path.clone()),
-        secret_key_hex: Some(opts.secret_key_hex),
-        key_id: Some(opts.key_id),
-    };
-    let _ = _ctx;
+    let final_diff_sha256 = compute_worktree_diff_sha(&repo_canon, &worktree)?;
+    append_signed(
+        &journal,
+        opts.run_id,
+        Event::EvidenceCaptured(EvidenceCaptured {
+            evidence_id: Uuid::new_v4(),
+            kind: "generic-final-diff".into(),
+            path: Some(worktree.display().to_string()),
+            sha256: final_diff_sha256.clone(),
+            bytes: None,
+            timestamp: Utc::now(),
+        }),
+        &identity,
+    )?;
 
     Ok(WrapReport {
         run_id: opts.run_id,
@@ -149,7 +225,7 @@ pub fn wrap(opts: WrapOptions) -> Result<WrapReport, AdapterError> {
         journal_path,
         agent_exit,
         detect_events,
-        final_diff_sha256,
+        final_diff_sha256: Some(final_diff_sha256),
         mediation: "mediation: incomplete — an out-of-band process can bypass LIA on this harness; native ELAI's process-isolation closes this".into(),
     })
 }
@@ -165,7 +241,8 @@ fn create_isolated_worktree(repo: &Path, worktree: &Path) -> Result<(), AdapterE
         let status = Command::new("git")
             .args([
                 "-C",
-                repo.to_str().ok_or_else(|| AdapterError::Invalid("repo path".into()))?,
+                repo.to_str()
+                    .ok_or_else(|| AdapterError::Invalid("repo path".into()))?,
                 "worktree",
                 "add",
                 "--detach",
@@ -279,8 +356,16 @@ fn compute_worktree_diff_sha(repo: &Path, worktree: &Path) -> Result<String, Ada
         hasher.update(p.as_bytes());
         let a = worktree.join(p);
         let b = repo.join(p);
-        let a_bytes = fs::read(&a).unwrap_or_default();
-        let b_bytes = fs::read(&b).unwrap_or_default();
+        let a_bytes = if a.is_file() {
+            fs::read(&a).map_err(|error| AdapterError::Invalid(error.to_string()))?
+        } else {
+            Vec::new()
+        };
+        let b_bytes = if b.is_file() {
+            fs::read(&b).map_err(|error| AdapterError::Invalid(error.to_string()))?
+        } else {
+            Vec::new()
+        };
         if a_bytes != b_bytes {
             hasher.update(&a_bytes);
         }

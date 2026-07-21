@@ -2,11 +2,11 @@
   "claude-code": {
     "level": "GATE",
     "gates": {
-      "test-integrity": "PREVENT",
-      "evidence-completeness": "PREVENT",
+      "test-integrity": "CANNOT-OBSERVE",
+      "evidence-completeness": "CANNOT-OBSERVE",
       "filesystem-scope": "PREVENT",
       "shell-irreversible": "PREVENT",
-      "dependency-reality": "PREVENT",
+      "dependency-reality": "CANNOT-OBSERVE",
       "secret-output": "PREVENT",
       "journal-tamper": "PREVENT"
     }
@@ -14,7 +14,7 @@
   "codex": {
     "level": "GATE",
     "gates": {
-      "test-integrity": "PREVENT",
+      "test-integrity": "CANNOT-OBSERVE",
       "evidence-completeness": "PREVENT",
       "filesystem-scope": "PREVENT",
       "shell-irreversible": "PREVENT",
@@ -26,12 +26,12 @@
   "generic": {
     "level": "OBSERVE",
     "gates": {
-      "test-integrity": "DETECT",
-      "evidence-completeness": "DETECT",
+      "test-integrity": "CANNOT-OBSERVE",
+      "evidence-completeness": "CANNOT-OBSERVE",
       "filesystem-scope": "DETECT",
       "shell-irreversible": "CANNOT-OBSERVE",
-      "dependency-reality": "DETECT",
-      "secret-output": "DETECT",
+      "dependency-reality": "CANNOT-OBSERVE",
+      "secret-output": "CANNOT-OBSERVE",
       "journal-tamper": "PREVENT"
     }
   },

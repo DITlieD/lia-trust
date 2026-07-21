@@ -32,9 +32,15 @@ pub enum AssuranceLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct CapabilityProbe {
     pub adapter: String,
     pub keys: BTreeMap<String, bool>,
+    /// Per-gate cells established by an adapter-specific runtime probe.
+    /// These override capability-key inference because a coarse capability
+    /// cannot prove that every gate is actually on the observed tool path.
+    #[serde(default)]
+    pub gate_cells: BTreeMap<String, GateCell>,
     #[serde(default)]
     pub probed_at: Option<String>,
     #[serde(default)]
@@ -62,9 +68,23 @@ pub struct AssuranceReport {
 impl AssuranceReport {
     pub fn from_probe(probe: &CapabilityProbe) -> Result<Self, AdapterError> {
         let keys = normalize_keys(&probe.keys);
+        for gate_id in probe.gate_cells.keys() {
+            if !CORE_GATE_IDS.contains(&gate_id.as_str()) {
+                return Err(AdapterError::Invalid(format!(
+                    "probe contains unknown gate cell: {gate_id}"
+                )));
+            }
+        }
         let mut gates = Vec::new();
         for gate_id in CORE_GATE_IDS {
-            let (cell, limit) = cell_for_gate(gate_id, &keys);
+            let (cell, limit) = match probe.gate_cells.get(*gate_id) {
+                Some(cell) => (
+                    *cell,
+                    "probe supplied this exact gate cell; provenance is recorded in probe notes"
+                        .into(),
+                ),
+                None => cell_for_gate(gate_id, &keys),
+            };
             gates.push(GateAssuranceCell {
                 gate_id: (*gate_id).to_string(),
                 cell,
@@ -82,7 +102,8 @@ impl AssuranceReport {
                 "mediation: hook-path complete for matched tools; @-path reads and non-tool side effects are outside PreToolUse".into()
             }
         } else {
-            "mediation: incomplete — no pre-execution block capability observed on this harness".into()
+            "mediation: incomplete — no pre-execution block capability observed on this harness"
+                .into()
         };
         let network = if cap(&keys, CAP_NETWORK_CONTROL) {
             "network confinement: PREVENT".into()
@@ -105,7 +126,12 @@ impl AssuranceReport {
         let cells: Vec<String> = self
             .gates
             .iter()
-            .map(|g| format!("{}: {:?}", g.gate_id, g.cell).replace("Prevent", "PREVENT").replace("Detect", "DETECT").replace("CannotObserve", "CANNOT-OBSERVE"))
+            .map(|g| {
+                format!("{}: {:?}", g.gate_id, g.cell)
+                    .replace("Prevent", "PREVENT")
+                    .replace("Detect", "DETECT")
+                    .replace("CannotObserve", "CANNOT-OBSERVE")
+            })
             .collect();
         format!(
             "adapter={} | {} | {} | assurance level: {:?}",
@@ -124,12 +150,7 @@ impl AssuranceReport {
         let mut lines = Vec::new();
         lines.push(format!("adapter: {}", self.adapter));
         for g in &self.gates {
-            lines.push(format!(
-                "{}: {} | {}",
-                g.gate_id,
-                cell_str(g.cell),
-                g.limit
-            ));
+            lines.push(format!("{}: {} | {}", g.gate_id, cell_str(g.cell), g.limit));
         }
         lines.push(self.network.clone());
         lines.push(self.mediation.clone());
@@ -158,7 +179,10 @@ fn level_str(l: AssuranceLevel) -> &'static str {
 fn normalize_keys(input: &BTreeMap<String, bool>) -> BTreeMap<String, bool> {
     let mut out = BTreeMap::new();
     for key in ALL_CAPABILITY_KEYS {
-        out.insert((*key).to_string(), input.get(*key).copied().unwrap_or(false));
+        out.insert(
+            (*key).to_string(),
+            input.get(*key).copied().unwrap_or(false),
+        );
     }
     out
 }
@@ -189,9 +213,15 @@ fn cell_for_gate(gate_id: &str, keys: &BTreeMap<String, bool>) -> (GateCell, Str
         }
         "evidence-completeness" => {
             if cap(keys, CAP_COMPLETION_GATE) {
-                (GateCell::Prevent, "completion gated on required evidence".into())
+                (
+                    GateCell::Prevent,
+                    "completion gated on required evidence".into(),
+                )
             } else if cap(keys, CAP_POST_WRITE_RECEIPT) {
-                (GateCell::Detect, "completion evidence inspected post-hoc".into())
+                (
+                    GateCell::Detect,
+                    "completion evidence inspected post-hoc".into(),
+                )
             } else {
                 (
                     GateCell::CannotObserve,
@@ -216,7 +246,10 @@ fn cell_for_gate(gate_id: &str, keys: &BTreeMap<String, bool>) -> (GateCell, Str
         }
         "shell-irreversible" => {
             if cap(keys, CAP_SHELL_PRE_BLOCK) {
-                (GateCell::Prevent, "shell pre-exec block via hook/proxy".into())
+                (
+                    GateCell::Prevent,
+                    "shell pre-exec block via hook/proxy".into(),
+                )
             } else if cap(keys, CAP_SHELL_RESULT_CAPTURE) {
                 (GateCell::Detect, "shell results captured after exec".into())
             } else {
@@ -228,9 +261,15 @@ fn cell_for_gate(gate_id: &str, keys: &BTreeMap<String, bool>) -> (GateCell, Str
         }
         "dependency-reality" => {
             if cap(keys, CAP_PRE_WRITE_BLOCK) || cap(keys, CAP_COMPLETION_GATE) {
-                (GateCell::Prevent, "dependency add gated before apply".into())
+                (
+                    GateCell::Prevent,
+                    "dependency add gated before apply".into(),
+                )
             } else if cap(keys, CAP_POST_WRITE_RECEIPT) {
-                (GateCell::Detect, "dependency claims checked post-hoc".into())
+                (
+                    GateCell::Detect,
+                    "dependency claims checked post-hoc".into(),
+                )
             } else {
                 (
                     GateCell::CannotObserve,
@@ -240,9 +279,15 @@ fn cell_for_gate(gate_id: &str, keys: &BTreeMap<String, bool>) -> (GateCell, Str
         }
         "secret-output" => {
             if cap(keys, CAP_PRE_WRITE_BLOCK) {
-                (GateCell::Prevent, "secret-bearing content inspectable pre-write".into())
+                (
+                    GateCell::Prevent,
+                    "secret-bearing content inspectable pre-write".into(),
+                )
             } else if cap(keys, CAP_POST_WRITE_RECEIPT) || cap(keys, CAP_SHELL_RESULT_CAPTURE) {
-                (GateCell::Detect, "secrets scanned in captured outputs".into())
+                (
+                    GateCell::Detect,
+                    "secrets scanned in captured outputs".into(),
+                )
             } else {
                 (
                     GateCell::CannotObserve,
@@ -265,10 +310,7 @@ fn cell_for_gate(gate_id: &str, keys: &BTreeMap<String, bool>) -> (GateCell, Str
                 )
             }
         }
-        other => (
-            GateCell::CannotObserve,
-            format!("unknown gate {other}"),
-        ),
+        other => (GateCell::CannotObserve, format!("unknown gate {other}")),
     }
 }
 
@@ -299,7 +341,9 @@ fn rollup_level(keys: &BTreeMap<String, bool>) -> AssuranceLevel {
     AssuranceLevel::Audit
 }
 
-pub fn load_assurance_from_probe_file(path: impl AsRef<Path>) -> Result<AssuranceReport, AdapterError> {
+pub fn load_assurance_from_probe_file(
+    path: impl AsRef<Path>,
+) -> Result<AssuranceReport, AdapterError> {
     let bytes = fs::read(path.as_ref()).map_err(|e| AdapterError::Invalid(e.to_string()))?;
     let probe: CapabilityProbe =
         serde_json::from_slice(&bytes).map_err(|e| AdapterError::Invalid(e.to_string()))?;
