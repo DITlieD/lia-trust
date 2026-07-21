@@ -15,17 +15,18 @@ actions when the corresponding gate is wired:
 They are **not** on Harbor TerminusLia (TB2/Claw) until that adapter is
 extended — see `docs/claims.json` honesty entries.
 
-**Not claimed in v1:** complete mediation / CONFINE for any hook/MCP adapter or
-generic wrap; network egress confinement; that trust automatically raises SWE
-pass-rate.
+**Not claimed:** complete mediation / CONFINE for any hook/MCP adapter or ordinary
+generic wrap; cross-platform confinement; that trust automatically raises SWE pass-rate. The
+opt-in Linux wrapper has narrower, per-run attested IP/path-write cells and does not close the full
+commercial isolation boundary.
 
 ## Mechanical gap list (from assurance cells)
 
 | CANNOT-OBSERVE / non-guarantee | Kernel status | Commercial / POST-L6 fill |
 |--------------------------------|---------------|---------------------------|
-| Complete mediation | GATE only (hooks/MCP) | Process supervisor + CONFINE |
-| Network egress PREVENT | capability key false | Host/network sandbox |
-| Credential broker | missing | Broker product surface |
+| Complete mediation | GATE only (hooks/MCP); optional wrapper is still not complete mediation | Process supervisor + full sandbox |
+| Network egress PREVENT | opt-in Linux wrap blocks IP egress for one attested process; hooks/unwrapped and non-IP IPC remain open | Cross-platform host/network sandbox |
+| Credential broker | scoped one-shot FD delivery; no separate-principal custody or general secret service | Keystore-backed broker product surface |
 | Registry-signed/transparency authenticity | bounded official HTTPS observation only | Registry transparency/signature integration |
 | Claim extraction from free text | closed (LIA) | Harness reasoning layer |
 | Auto-repair after gate fail | closed (LIA) | Harness recovery |

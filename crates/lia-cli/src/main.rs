@@ -1,18 +1,19 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{
-    assert_adapter, collect_registry_evidence, default_claude_home, default_codex_home,
-    default_cursor_home, default_gemini_home, default_lia_home, evaluate_generic_action,
-    evaluate_named_gate, handle_cursor_mcp_stdin, handle_cursor_shell_stdin,
-    handle_gemini_before_tool_stdin, handle_jsonrpc, handle_pre_tool_stdin,
-    install as install_kernel, known_adapters, load_and_validate_process_contract,
-    looks_like_live_user_home, report_for_adapter, serve_mcp_stdio, status as install_status,
-    uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction, InspectionContext,
-    InstallRequest, RegistryEcosystem, RegistryEvidenceOptions, RunContext, WrapOptions,
+    assert_adapter, collect_registry_evidence, credential_read, default_claude_home,
+    default_codex_home, default_cursor_home, default_gemini_home, default_lia_home,
+    evaluate_generic_action, evaluate_named_gate, handle_cursor_mcp_stdin,
+    handle_cursor_shell_stdin, handle_gemini_before_tool_stdin, handle_jsonrpc,
+    handle_pre_tool_stdin, install as install_kernel, internal_confined_exec, known_adapters,
+    load_and_validate_process_contract, looks_like_live_user_home, report_for_adapter,
+    serve_mcp_stdio, status as install_status, uninstall as uninstall_kernel, wrap, CredentialSpec,
+    DenialRecord, GenericAction, InspectionContext, InstallRequest, LinuxConfinementOptions,
+    RegistryEcosystem, RegistryEvidenceOptions, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
@@ -316,6 +317,34 @@ enum Commands {
         no_watch: bool,
         #[arg(long, default_value_t = 900)]
         timeout_seconds: u64,
+        #[arg(long, default_value_t = false)]
+        linux_confine: bool,
+        #[arg(long)]
+        unshare_bin: Option<PathBuf>,
+        #[arg(long)]
+        expected_unshare_sha256: Option<String>,
+        #[arg(long = "credential")]
+        credentials: Vec<String>,
+        #[arg(long, default_value_t = 30)]
+        credential_ttl_seconds: u64,
+        #[arg(last = true)]
+        agent: Vec<String>,
+    },
+    #[command(name = "credential-read")]
+    CredentialRead {
+        #[arg(long)]
+        name: String,
+    },
+    #[command(name = "__confined-exec", hide = true)]
+    ConfinedExec {
+        #[arg(long)]
+        worktree: PathBuf,
+        #[arg(long)]
+        evidence_dir: PathBuf,
+        #[arg(long = "mask-path")]
+        mask_paths: Vec<PathBuf>,
+        #[arg(long)]
+        control_fd: i32,
         #[arg(last = true)]
         agent: Vec<String>,
     },
@@ -847,6 +876,11 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             watch,
             no_watch,
             timeout_seconds,
+            linux_confine,
+            unshare_bin,
+            expected_unshare_sha256,
+            credentials,
+            credential_ttl_seconds,
             agent,
         } => run_wrap(
             repo,
@@ -857,8 +891,29 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             run_id,
             watch && !no_watch,
             timeout_seconds,
+            linux_confine,
+            unshare_bin,
+            expected_unshare_sha256,
+            credentials,
+            credential_ttl_seconds,
             agent,
         ),
+        Commands::CredentialRead { name } => {
+            let secret = credential_read(&name)?;
+            io::stdout().write_all(secret.as_slice())?;
+            io::stdout().flush()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Commands::ConfinedExec {
+            worktree,
+            evidence_dir,
+            mask_paths,
+            control_fd,
+            agent,
+        } => {
+            internal_confined_exec(&worktree, &evidence_dir, &mask_paths, control_fd, &agent)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Commands::Report {
             adapter,
             probe,
@@ -1406,10 +1461,49 @@ fn run_wrap(
     run_id: Option<Uuid>,
     watch: bool,
     timeout_seconds: u64,
+    linux_confine: bool,
+    unshare_bin: Option<PathBuf>,
+    expected_unshare_sha256: Option<String>,
+    credential_args: Vec<String>,
+    credential_ttl_seconds: u64,
     agent: Vec<String>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cfg = load_gate_config(&config)?;
     let run_id = run_id.unwrap_or_else(Uuid::new_v4);
+    if !linux_confine
+        && (unshare_bin.is_some()
+            || expected_unshare_sha256.is_some()
+            || !credential_args.is_empty())
+    {
+        return Err("confinement helper and credentials require --linux-confine".into());
+    }
+    let confinement = if linux_confine {
+        let unshare_bin = unshare_bin.ok_or("--linux-confine requires --unshare-bin")?;
+        let expected_unshare_sha256 =
+            expected_unshare_sha256.ok_or("--linux-confine requires --expected-unshare-sha256")?;
+        let mut credentials = Vec::new();
+        for value in credential_args {
+            let (name, source) = value
+                .split_once('=')
+                .ok_or("--credential requires NAME=PATH")?;
+            if name.is_empty() || source.is_empty() {
+                return Err("--credential requires nonempty NAME=PATH".into());
+            }
+            credentials.push(CredentialSpec {
+                name: name.into(),
+                source_path: PathBuf::from(source),
+            });
+        }
+        Some(LinuxConfinementOptions {
+            unshare_bin,
+            expected_unshare_sha256,
+            lia_executable: std::env::current_exe()?,
+            credentials,
+            credential_ttl_seconds,
+        })
+    } else {
+        None
+    };
     let report = wrap(WrapOptions {
         repo,
         evidence_dir,
@@ -1420,11 +1514,14 @@ fn run_wrap(
         env_allowlist: None,
         watch,
         timeout_seconds,
+        confinement,
         agent_argv: agent,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
-    if report.agent_exit == 0 {
+    if report.agent_exit == 0 && !report.trust_boundary_failed {
         Ok(ExitCode::SUCCESS)
+    } else if report.agent_exit == 0 {
+        Ok(ExitCode::from(1))
     } else {
         Ok(ExitCode::from(report.agent_exit as u8))
     }

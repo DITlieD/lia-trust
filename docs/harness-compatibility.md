@@ -8,6 +8,7 @@ derived from capability keys (see `bench/assurance_truth.json` + `lia report`).
 | **Claude Code** CLI / IDE hooks | `lia install` → `~/.claude/settings.json` `hooks.PreToolUse` | PreToolUse command hook → `lia hook` | **GATE** | filesystem-scope, shell-irreversible, secret-output, journal-tamper on mapped tools | Network/credential CONFINE; test/completion result observation; non-tool side effects; @-path reads outside tools |
 | **Codex** CLI / desktop MCP | `lia install` → `~/.codex/config.toml` `[mcp_servers.lia-trust]` | stdio MCP → `lia mcp` proxy tools | **GATE** | evidence-completeness, filesystem-scope, shell-irreversible, dependency-reality, secret-output, journal-tamper | Tools that never call the `lia-trust` server; network/credential CONFINE |
 | **Generic / Devin-bridge** | `lia wrap` / `lia bench --harness generic` | Process wrap + optional watcher | **OBSERVE** / partial DETECT | journal-tamper PREVENT; shell often CANNOT-OBSERVE unless wrap captures | Complete mediation; CONFINE |
+| **Generic (`--linux-confine`)** | Explicit digest-pinned `lia wrap` mode on supported Linux | user/mount/network/PID/UTS/IPC namespaces + recursive read-only host mount tree + Landlock write policy + credential FD broker | **CONFINE** only for attested per-run IP/path-write cells | IP egress, host/evidence path writes, one-shot declared credential delivery | Host filesystem reads; pathname Unix sockets; pre-opened FDs; same-uid/out-of-band processes; complete mediation |
 | **TerminusLia (Harbor)** | Harbor agent wiring | Shell-irreversible only | **GATE** (shell) | shell-irreversible (+ fs when roots set) | ground/syco/ast/completion on that path |
 | **Gemini CLI** | `lia install` → `~/.gemini/settings.json` `hooks.BeforeTool` | exact documented tool matcher → `lia hook --adapter gemini-cli` | **GATE** `[MEASURED]` | filesystem-scope, shell-irreversible, secret-output, journal-tamper on mapped tools | Unmatched/new tools; test/completion result observation; network/credential CONFINE |
 | **Cursor** | `lia install` → `~/.cursor/hooks.json` | fail-closed shell + MCP pre-hooks → `lia hook` | **GATE** | shell-irreversible and journal-tamper currently frozen | Unmapped tool semantics; network/credential CONFINE; all cells not probe-proven |
@@ -44,4 +45,5 @@ Fixture / CI (recommended):
   both mediated events.
 
 Kernel does **not** inject editor UI chrome; it only wires the trust TCB at the
-tool boundary.
+tool boundary. The optional generic Linux wrapper is a separate execution mode and does not raise
+any hook/MCP adapter's assurance level.

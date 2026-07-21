@@ -133,8 +133,46 @@ The Kernel validates this boundary; it does not plan, decompose, repair, or deci
 
 Executable digests and offline cache digests are trust roots supplied by the operator; pin them from
 outside the agent-writable boundary. Same-UID replacement between checking and use remains a TOCTOU
-limit until M5 isolation. Treat the live output as TLS-observed dependency evidence and journal or
+limit; the optional namespace wrapper does not create a separate OS principal. Treat the live output as TLS-observed dependency evidence and journal or
 bundle it outside the agent's writable boundary when durable authenticity matters.
+
+## Optional Linux confinement contract
+
+`lia wrap --linux-confine` is a separate, opt-in execution boundary. It requires an absolute
+`--unshare-bin`, an exact `--expected-unshare-sha256`, and a Linux host on which the requested
+user/mount/network/PID/UTS/IPC namespaces and Landlock ABI revision three are available. LIA rejects
+an untrusted helper ownership/mode chain and checks its bytes both before and immediately after
+spawn. When the wrapper itself runs as euid 0, root ownership cannot distinguish the helper from
+the current principal, so operators relying on that ownership boundary must run LIA unprivileged.
+The inner wrapper:
+
+1. makes mount propagation private;
+2. preserves the worktree as a writable submount while mounting evidence read-only;
+3. masks each declared credential source;
+4. installs a Landlock ruleset handling write, remove, create, link/rename, and truncate rights,
+   granting them only below the worktree;
+5. drops capabilities and sends namespace/Landlock readiness to the parent;
+6. waits until the parent signs `confinement_applied` plus `generic-linux-confinement` evidence and
+   replies `GO`.
+
+Confinement evidence becomes a required process-contract input, so a terminal VERIFIED receipt
+cannot omit it. A new network namespace without an external interface proves IP-egress denial for
+that process. It does not prove denial of every IPC transport: this backend does not install
+Landlock network/IPC rights, so pathname Unix sockets remain outside the claim on every supported
+ABI, and reads outside the worktree are not denied.
+
+`--credential NAME=PATH` accepts only a private, current-owner, non-symlink, single-link regular
+file. The broker uses an inherited Unix-stream descriptor named by
+`LIA_CREDENTIAL_FD_<UPPER_NAME>`; that variable contains only a descriptor number. `lia
+credential-read --name NAME` performs one exact-name request before `--credential-ttl-seconds`
+expires. The broker returns the bounded bytes once, overwrites and unlocks its buffer, and refuses
+late/repeated requests. This is scoped delivery and exact-source masking, not confidentiality from
+every process sharing the operator uid.
+
+The implementation follows the kernel's runtime ABI-query, `no_new_privs`, ruleset, and inheritance
+model ([Landlock userspace API](https://www.kernel.org/doc/html/latest/userspace-api/landlock.html))
+and util-linux namespace lifecycle semantics
+([unshare(1)](https://man7.org/linux/man-pages/man1/unshare.1.html)).
 
 ## Assurance (honest boundary)
 
@@ -144,10 +182,13 @@ bundle it outside the agent's writable boundary when durable authenticity matter
 | Codex | MCP proxy tools only | **GATE** |
 | Gemini CLI | BeforeTool path for the installed matcher only | **GATE** |
 | Cursor | Shell/MCP hooks with `failClosed: true`; mapped tools only | **GATE** |
-| Generic wrap | Worktree + env allowlist; not complete mediation | **OBSERVE** / partial DETECT |
+| Generic wrap (default) | Worktree + env allowlist; not complete mediation | **OBSERVE** / partial DETECT |
+| Generic wrap (`--linux-confine`, attested per run) | Namespace isolation + Landlock path-write boundary + scoped credential FD | **CONFINE** only for that wrapped process's measured IP/path-write cells |
 
-**CONFINE is forbidden in v1 claims** (`v1_forbid_confine: true`). Network,
-credential broker, and non-tool side effects are **CANNOT-OBSERVE**.
+Static hook/MCP profiles still forbid CONFINE (`v1_forbid_confine: true`). The optional Linux
+backend reports its per-run boundary separately; it does not upgrade Claude/Codex/Gemini/Cursor or
+unwrapped processes. Separate-principal authenticity, unrestricted reads, and complete mediation
+remain **CANNOT-OBSERVE**.
 
 ## What Kernel is (product boundary)
 
@@ -155,5 +196,5 @@ Kernel = protocol + journal + Ed25519 receipts + seven gates + offline verify +
 thin adapters at harness tool boundaries.
 
 Not Kernel: commercial **Harness** / **Canvas** layers, claim extraction,
-planning FSM, multi-agent recovery, or automatic repair. Namespace/egress/credential confinement is
-separate optional work and must not be inferred from these hook adapters.
+planning FSM, multi-agent recovery, or automatic repair. Linux confinement is an explicit wrapper
+mode and must not be inferred from hook adapters or ordinary `lia wrap`.

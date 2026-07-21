@@ -125,7 +125,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P3-1 | second free-model utility lane | local driver exists; actual second-model execution is deferred | PARTIAL | local lane configuration validated; run remains explicitly gated on external model/service availability and cost | M6 |
 | P3-2 | Claw companion signal | documented companion metric | SHIPPED | claims remain non-product and non-pooled | M6 |
 | P3-3 | AST/taint corpus classes | corpus and runner classes exist | SHIPPED | current by-class replay | M2/M6 |
-| P3-4 | network/egress confinement | no backend; capability false | MISSING | supported Linux backend proves egress deny; unsupported hosts fail closed/honest | M5 |
+| P3-4 | network/egress confinement | opt-in wrapper creates and attests a fresh network namespace with no external interface; hook/static profiles remain unchanged | SHIPPED-LOCAL | 7-case production suite proves IP-egress deny or fail-closed unavailability; non-IP IPC stays explicit | M5 complete; M6 reproof |
 | P3-5 | Gemini CLI and Cursor adapters | documented native hook modules, idempotent installers, installed-wrapper smoke, conformance, signed denials, and honest unmatched-tool behavior `[MEASURED]` | SHIPPED | adapters, installers/launchers, conformance, probes, receipts | M4 complete; live harness agents remain M6 external lane |
 | P3-6 | full typed process contract | versioned schema; signed pre-action declaration; typed action/evidence/assumption/claim/outcome state; signed terminal execution manifest | SHIPPED | versioned contract schema, state transitions, validator, CLI/adapter proof | M4 complete; M6 reproof |
 | P3-7 | MCP inspection/live agent PREVENT | inspection UX and recorded adapters shipped; live OAuth not run | PARTIAL | inspection conformance; live portion remains exact external credential gate | M4/M6 |
@@ -137,16 +137,16 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 |---|---|---|---|---|---|
 | `docs/shell-rm-policy.md` | explicit policy-approved in-root cleanup | V2 schema and deterministic gate are live with receipt-backed CLI coverage | SHIPPED | M1 independent PASS; final-head replay in M6 | M1 complete; M6 reproof |
 | roadmap P3-1 | second utility model lane | lane machinery exists, execution deferred | PARTIAL | validate local configuration; record external model/service/cost execution gate | M6 |
-| roadmap P3-4 | network/egress CONFINE | capability key false, no backend | MISSING | local Linux network namespace/deny proof where supported | M5 |
+| roadmap P3-4 | network/egress CONFINE | per-run signed namespace attestation and IP-denial proof; static hook profiles remain false | SHIPPED-LOCAL | local supported-host namespace/deny proof plus honest unavailable path | M5 complete; M6 reproof |
 | roadmap P3-5 | Gemini CLI adapter | documented BeforeTool mapping, install merge, conformance and installed-wrapper signed deny | SHIPPED-LOCAL | real supported hook/proxy entrypoint plus signed deny | M4 complete |
 | roadmap P3-5 | Cursor adapter | fail-closed shell/MCP hook mapping, install merge, conformance and installed-wrapper signed deny | SHIPPED-LOCAL | real supported hook/proxy entrypoint plus signed deny | M4 complete |
 | roadmap P3-6 | full typed process-contract validator | pre-action contract digest and full execution-state terminal manifest are enforced | SHIPPED | schema, transition validator, reason codes, CLI/adapter proof | M4 complete |
 | roadmap P3-7 | live Claude/Codex agent PREVENT | recorded lanes only | PARTIAL | local conformance complete; live run requires owner OAuth/service | M6 |
 | roadmap P3-8 | funding applications | docs only, intentionally post-release | EXTERNAL-ONLY | no external submission; claims-clean template/state only | M6 |
 | roadmap P3-9 / HL-5 | optional cosign public-log verification | digest-pinned external cosign path with identity/issuer pins, input hashes, bounded process-group/output lifecycle | SHIPPED-LOCAL | optional executable verifier with timeout and fixture/mock; live log external | M4 complete; live log M6 external gate |
-| roadmap P3-10 | Linux namespace CONFINE backend | absent | MISSING | supported-host namespace/process proof and honest fallback | M5 |
+| roadmap P3-10 | Linux namespace CONFINE backend | opt-in user/mount/network/PID/UTS/IPC namespace + recursive read-only mount tree + writable worktree + Landlock ABI 3 + capability drop | SHIPPED-LOCAL | runtime attestation, signed report, process-contract binding and fail-closed setup | M5 complete; M6 reproof |
 | threat model | signing identity outside agent principal | key file shares user identity today | PARTIAL | brokered FD/process boundary and file-permission checks; OS principal separation external | M5 |
-| threat model | credential broker | capability false, env allowlist still includes credential-adjacent vars | MISSING | secret-minimized child environment and scoped credential delivery/expiry | M5 |
+| threat model | credential broker | secret-minimized child environment, exact-source mask, locked/zeroed one-shot expiring descriptor broker; same-uid custody not claimed | SHIPPED-SCOPED | permission/duplicate-name/one-shot/TTL production cases | M5 complete; M6 reproof |
 | threat model | live registry dependency evidence | fixed official crates.io/npm HTTPS origins, pinned client, bounded response/process, externally pinned and age-bounded offline cache | SHIPPED-LOCAL | bounded client, pinned response evidence, offline/cache semantics, timeout | M4 complete; live network sample M6 optional |
 | threat model | persistent evidence outside writable worktree | generic wrap signs process/diff events externally; Terminus uses per-trial external evidence; hook install still shares user identity | PARTIAL | M2 persistence/tamper proof complete; separate-principal ownership remains | M5 |
 
@@ -436,16 +436,81 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M5 — confinement, egress, and credential/evidence isolation
 
-- State: `IN_PROGRESS`
+- State: `AUDITED_PENDING_COMMIT`
 - Requirements: P3-4/P3-10 and threat-model isolation promises
+- Official interface grounding: util-linux namespace and `--kill-child` lifecycle semantics from
+  `https://man7.org/linux/man-pages/man1/unshare.1.html`; mount-namespace isolation from
+  `https://man7.org/linux/man-pages/man7/mount_namespaces.7.html`; kernel namespace resource and
+  privilege guidance from `https://www.kernel.org/doc/html/latest/admin-guide/namespaces/resource-control.html`;
+  Landlock ABI negotiation, `no_new_privs`, inherited restrictions and filesystem write/truncate/
+  refer rights from `https://www.kernel.org/doc/html/latest/userspace-api/landlock.html` and
+  `https://man7.org/linux/man-pages/man7/landlock.7.html`.
+- RED evidence: independent auditor compiled and ran the new production CLI integration before the
+  implementation existed; all 4 initial cases failed because `--linux-confine`, helper pinning,
+  namespace attestation and credential delivery were absent. This was missing-behavior RED, not a
+  malformed fixture.
+- Completed boundary: the opt-in wrapper pins the configured absolute `unshare` helper by canonical
+  path, root ownership, non-group/world-writable mode and SHA-256 before and immediately after spawn;
+  requests user/mount/network/PID/UTS/IPC namespaces,
+  private propagation, a new proc mount and kill-child lifecycle; then waits for an inner attestation
+  proving distinct network/mount/PID namespace identities, Landlock ABI at least three, a recursively
+  read-only mount tree, read-only evidence and dropped capabilities. The worktree is a distinct
+  writable submount. Any setup/attestation/persistence failure kills and reaps the process group
+  before the agent receives `GO`.
+- Evidence binding: before release, the parent persists private exact
+  `confinement-report-<run_id>.json` bytes with create-new semantics plus file/directory sync, hashes
+  them, signs `confinement_applied`, emits matching `generic-linux-confinement`
+  evidence, and makes that digest a required input to the typed process contract and terminal
+  execution manifest. The report distinguishes true IP/path-write/evidence cells from false
+  host-read and pathname-Unix-socket cells.
+- Scoped credentials: a maximum of 16 unique normalized names may reference nonempty current-owner
+  private, non-symlink, single-link files of at most 64 KiB outside the worktree. Each exact source is
+  masked in the child mount namespace. The child environment contains only an inherited descriptor
+  number; credential-adjacent Cargo/Rustup variables are stripped. The broker requires `mlock`,
+  serves one exact-name request before an absolute 1–300 second deadline, then zeroes and unlocks the
+  buffer with compiler-resistant zeroization. Late, repeated, ambiguous and permission-invalid
+  requests fail closed; a hostile raw request becomes a typed terminal honest stop rather than
+  leaving the process contract incomplete.
+- Test progression: the first implementation passed 2/4 because nesting the worktree below evidence
+  made it read-only; a distinct writable submount fixed the topology and reached 4/4. A TTL case then
+  exposed error normalization/fixture redirection and was repaired. Hostile source audit blocked an
+  overbroad claim and duplicate normalized names and warned on cleanup, buffer disposal and evidence
+  reconstruction. Remediation added recursive root read-only enforcement, deliberately false
+  read/Unix-socket fields, duplicate/cap rejection, RAII zero/unlock, exhaustive post-spawn cleanup,
+  and exact persisted report hashing. A second source audit then blocked fixed-name report overwrite
+  across runs and a broker-error early return before terminalization; remediation uses run-qualified,
+  create-new, file-and-directory-synced report bytes, a two-run reconstruction proof, and a declared
+  `credential-broker-failed` honest stop. The independent focused rerun passed 7/7 `[MEASURED]`;
+  source re-audit returned no acceptance blocker, with its remaining buffer-order and doc warnings
+  repaired before the full audit.
+- Full independent audit `[MEASURED]`: Rust workspace tests passed 142/142 across 37 test/doc-test
+  executables and `cargo check --workspace` passed. The focused Linux production suite passed 7/7;
+  conformance passed 10/10; gate freeze passed; the wire checker reported no DARK symbol; changed/new
+  Rust formatting, docs plus README claims lint, changed JSON parsing and `git diff --check` all
+  passed. Strict clippy passed for the M5 delta after boxing the confined enum variant; raw runs still
+  expose unchanged debt assigned to M6.
+- Honest assurance: only the one attested wrapped process earns IP-egress and filesystem-path-write
+  CONFINE cells. Filesystem reads, pathname Unix sockets, pre-opened descriptors, kernel/host
+  compromise, same-uid/out-of-band processes and complete mediation are not covered. Hook/MCP and
+  ordinary wrap profiles remain unchanged. When LIA itself runs as euid 0, root ownership cannot
+  serve as a distinct helper-principal check; operators relying on it must run the wrapper
+  unprivileged.
+- Dependencies: direct `libc` mount/Landlock/capability primitives and a direct `zeroize` use for
+  compiler-resistant secret-buffer disposal; both crates were already present in the lock graph.
+- Blocker: none for local M5 scope.
+- Next action: commit M5, record its implementation hash, then begin M6 proof/debt closure.
 - Commit: pending
 
 ### M6 — proof and completion audit
 
 - State: pending
 - Requirements: every ledger row reconciled; all local acceptance evidence current; external gates exact
-- Discovered baseline debt: repair `tools/lia_wire_check/src/lib.rs:256` so full-workspace clippy can
-  pass without an allow; re-evaluate extraction of the M1 cleanup classifier from `shell.rs`.
+- Discovered baseline debt: repair the two `needless_return` findings and `make_outcome`
+  `too_many_arguments` in `lia-gates`, `tools/lia_wire_check/src/lib.rs:256`
+  `needless_range_loop`, `lia-adapters/src/registry.rs:519` `single_match`, and the pre-existing CLI
+  `too_many_arguments` findings (including `run_wrap`) so full-workspace strict clippy passes without allows. Apply the
+  recorded full-workspace rustfmt drift and re-evaluate extraction of the M1 cleanup classifier from
+  `shell.rs`.
 - Commit: pending
 
 ## Commit recording convention

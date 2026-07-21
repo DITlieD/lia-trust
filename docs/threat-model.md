@@ -1,4 +1,4 @@
-# LIA Trust Kernel — threat model (v1)
+# LIA Trust Kernel — threat model
 
 ## Assets
 
@@ -19,7 +19,7 @@
 
 ## Trust boundary (Kernel TCB)
 
-In scope for v1 Kernel:
+In scope for the current Kernel:
 
 - Protocol events + seven gates (rules-as-data, fail-closed)
 - Append-only journal + blake3 chain + Ed25519 receipts
@@ -28,11 +28,15 @@ In scope for v1 Kernel:
 - Thin adapters: Claude Code **PreToolUse**, Codex **MCP**, Gemini CLI **BeforeTool**, Cursor
   fail-closed shell/MCP hooks, and generic wrap (honest partial mediation)
 - Optional digest-pinned external cosign verification and official-origin dependency observations
+- Optional Linux `lia wrap --linux-confine`: attested namespaces, recursively read-only host mount
+  tree with a writable worktree submount, Landlock write policy, capability drop, signed per-run
+  evidence, and one-shot expiring credential descriptors
 
 Out of scope (not Kernel / commercial LIA or POST-L6):
 
 - Planning, recovery, multi-agent orchestration, claim extraction
-- Process/network **CONFINE** and credential broker
+- Cross-platform or complete process/network **CONFINE**
+- Filesystem-read confinement, every local IPC transport, and separate-principal credential custody
 - Commercial Harness / Canvas product layers
 
 ## Attack → control map
@@ -49,6 +53,10 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
 | Post-hoc process contract / receipt reuse | signed contract declaration before actions + contract-scoped terminal manifest digest | Same-UID signer-key compromise can still forge |
 | Fake verifier/client helper | operator-pinned executable digest; official registry origins only | Same-UID TOCTOU/dynamic dependency replacement; operator can deliberately pin an untrusted helper |
 | Offline registry cache rewrite | external response + metadata digest pins and max-age policy | Pin storage must remain outside agent write roots |
+| Wrapped process opens an IP connection | attested fresh network namespace with no external interface | Only the opt-in confined process; pathname Unix sockets and pre-opened descriptors are separate |
+| Wrapped process mutates host/evidence paths | recursive read-only mount tree + writable worktree submount + Landlock ABI 3 write restrictions | Path-based writes only; pre-opened descriptors and kernel/host compromise are outside the claim |
+| Agent reads a declared credential source | exact source bind-mask + one-shot expiring FD broker with locked/zeroed buffer | Other same-uid processes and undeclared aliases/hard paths require a separate principal |
+| Agent starts before confinement evidence exists | child attestation handshake; parent persists, hashes, journals, and contract-binds the report before `GO` | Trusts the pinned helper, wrapper, kernel, and protected signing/evidence paths |
 | Bypass hooks | Assurance honesty: GATE not CONFINE | Complete mediation **not claimed** |
 | Secret in logs | secret-output when payload observed | Regex set is non-exhaustive; not all free-text agent stdout |
 
@@ -67,14 +75,19 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
   and use `--require-authenticity` when verifying a bundle you did not produce. Without an
   anchor the report is `authenticated: false` / `authenticity: "self-rooted"` and says so.
 
-## Known limitations (v1, disclosed not hidden)
+## Known limitations (disclosed, not hidden)
 
-- **Same-uid key exposure.** The signing key lives at `~/.lia-trust/keys/…` mode 0600. A
+- **Same-uid key and credential exposure.** The signing key lives at `~/.lia-trust/keys/…` mode 0600. A
   wrapped agent that shares the operator's uid (Claude Code / Codex run as the user) can read
   it and forge authentic-looking journal rows. 0600 does not defend against the same uid.
-  For a hard guarantee, run the signer under a separate principal the agent cannot read; a
-  broker/keystore is a POST-L6 fast-follow. This is why the assurance ceiling is GATE, not
-  CONFINE.
+  The optional broker masks an exact declared credential path inside its mount namespace, but
+  neither it nor 0600 protects against another adversarial same-uid process. For a hard guarantee,
+  run the signer and credential source under a separate principal the agent cannot read.
+- **Linux confinement is deliberately narrow.** A successful per-run attestation supports IP-egress
+  and filesystem-path-write CONFINE for that wrapped process. It does not confine host filesystem
+  reads, pathname Unix sockets, pre-opened file descriptors, or out-of-band processes. Unsupported
+  namespaces, Landlock ABI below three, helper drift, mount failure, or memory-lock failure stop
+  before the agent is released.
 - **Shell gate is a best-effort denylist, not a complete classifier.** It denies a curated,
   adversarially-tested set of irreversible shapes (recursive delete incl. `find -exec`/`xargs`,
   `truncate -s 0`, `chmod -R 000`, force-push, publish, fork bomb, pipe-to-interpreter, power
@@ -88,7 +101,9 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
   digest-pinned `cosign` process reported for the hashed paths; it does not authenticate the cosign
   binary's provenance for you. Registry evidence similarly depends on the operator's pinned client,
   platform CA store, and protected external cache pins. Same-UID replacement races remain until a
-  stronger principal/confinement boundary exists.
+  stronger principal boundary exists. The Linux wrapper checks the helper before and immediately
+  after spawn, but same-UID replacement of other trusted executable/dependency paths remains a host
+  hardening concern.
 
 ## Install attack surface
 
@@ -100,4 +115,7 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
 
 ## Non-goals / non-guarantees
 
-See `docs/guarantee-matrix.md`. v1 never claims CONFINE, complete mediation, or network egress PREVENT.
+See `docs/guarantee-matrix.md`. Hook/MCP adapters never claim CONFINE. Only a successful, signed
+`lia wrap --linux-confine` report supports the narrow IP-egress and filesystem-path-write cells;
+complete mediation, read confinement, every IPC transport, and same-principal secrecy remain
+non-guarantees.

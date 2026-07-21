@@ -114,6 +114,48 @@ deadline does not override cleanup safety: if the OS refuses to kill or reap the
 stays fail-stop and keeps retrying with bounded diagnostic state instead of returning while that
 child may still be live.
 
+### Opt-in Linux confinement and scoped credentials
+
+On a Linux host with unprivileged namespaces and Landlock ABI revision three or newer, `lia wrap`
+can put the wrapped process behind a user/mount/network/PID/UTS/IPC namespace boundary. The helper
+must be an explicitly digest-pinned, root-owned `unshare` binary:
+
+```bash
+lia wrap --repo ./repo --evidence-dir /safe/evidence --config gate-config.json \
+  --secret-key-hex "$LIA_SECRET" --linux-confine \
+  --unshare-bin /usr/bin/unshare --expected-unshare-sha256 <sha256> \
+  -- agent-command
+```
+
+The child cannot start until the trusted inner wrapper reports distinct namespace identities,
+installs a read-only evidence mount, applies a Landlock write allow-rule only to the worktree, drops
+capabilities, and waits for a parent `GO`. The parent then writes signed confinement evidence and
+binds it into the process-completion manifest. A fresh network namespace with no external interface
+blocks IP egress for that wrapped process. Unsupported hosts, helper drift, failed mounts, or a
+missing Landlock boundary stop before the agent runs.
+
+Credentials are optional, one-shot, and deadline-bounded:
+
+```bash
+chmod 600 /safe/credentials/api-token
+lia wrap ... --linux-confine ... \
+  --credential api=/safe/credentials/api-token --credential-ttl-seconds 30 \
+  -- agent-command
+# inside that wrapped process only:
+lia credential-read --name api
+```
+
+The secret comes from a private, current-owner, single-link regular file; it is delivered over an
+inherited file descriptor, never placed in the environment, and its exact source path is masked in
+the child mount namespace. Broker memory must be locked or setup fails; it is overwritten and
+unlocked after the sole request, and a late or repeated request fails.
+
+This is scoped CONFINE for IP egress and filesystem-path writes outside the worktree, not complete
+mediation or a separate-principal sandbox. Reads outside the worktree, pre-opened descriptors,
+pathname Unix sockets (this backend does not install Landlock network/IPC rights), and another
+process running as the operator remain residual risks. Hook/MCP adapters do not inherit this
+assurance automatically.
+
 Long journals can be rotated without discarding the full archive, and a compact signed head/tail
 manifest can be verified separately:
 
@@ -149,15 +191,17 @@ or `[EXTERNAL]` tag and pass `lia claims-lint`.
 | Codex adapter path | PREVENT OFF/ON on frozen corpus via real MCP | MEASURED recorded-adapter (see claims); live separate |
 | Gemini/Cursor adapter paths | Native payload/config conformance + signed deny through installed wrappers | MEASURED local fixtures only; live harness agents unmeasured |
 | Process/public/registry M4 | Contract/manifest negatives, pinned-helper delegation, cache/timeout controls | MEASURED local fixtures only; no public-log or live-registry claim |
+| Linux confinement M5 | Namespaces, IP/path-write deny, durable signed report, scoped credential lifecycle | MEASURED local production fixtures only; no read/Unix-socket/same-principal or cloud-agent claim |
 | TerminusLia TB2/Claw | Shell-irreversible only (livability companion) | MEASURED companion — **not** full trust stack |
 | Recorded cassette | Offline when live unreachable | MEASURED, never pooled with live |
 
 ## Assurance honesty
 
 Adapter capability cells live in `bench/assurance_truth.json` and must be
-probe-derived where possible (`bench/probe_assurance.sh`). Generic wrap is not
-CONFINE in v1. Claude Code, Codex, Gemini CLI, and Cursor install surfaces are **GATE** only for
-their mapped tool paths. TerminusLia is
+probe-derived where possible (`bench/probe_assurance.sh`). Ordinary generic wrap is not CONFINE;
+only a successful per-run `--linux-confine` attestation earns its narrow IP/path-write cells.
+Claude Code, Codex, Gemini CLI, and Cursor install surfaces are **GATE** only for their mapped tool
+paths. TerminusLia is
 GATE for shell only; ground/syco/ast are CANNOT-OBSERVE on that path.
 
 ## Useful without commercial harness
@@ -170,6 +214,6 @@ offline verify. No commercial LIA Harness/Canvas required.
 ## Do not claim
 
 - Grounding helped TB2/Claw until it is on the Terminus path.
-- Complete mediation / CONFINE for Claude Code, Codex, or generic wrap in v1.
+- Complete mediation / CONFINE for Claude Code, Codex, or ordinary generic wrap.
 - Pooled recorded + live catch rates.
 - Utility pass-rate as the product metric.

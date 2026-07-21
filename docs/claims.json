@@ -167,6 +167,13 @@
         "MEASURED"
       ],
       "pointer": "crates/lia-cli/tests/m4_process_adapters_public_registry.rs + conformance/SUITE.json + crates/lia-adapters/src/process_contract.rs"
+    },
+    {
+      "text": "M5 Linux confinement production-path suite [MEASURED]: 7/7 local cases prove exact helper-digest rejection, namespace/IP-egress and host/evidence path-write denial on the supported host, writable worktree, durable signed confinement evidence bound into the process contract across repeated runs, fail-closed credential permissions and duplicate-name handling, one-shot/TTL credential behavior, and terminal honest-stop evidence after a hostile broker request. This is narrow per-run IP/path-write confinement, not filesystem-read confinement, pathname Unix-socket mediation, separate-principal secrecy, a hook-adapter guarantee, or a live cloud-agent/Harbor measurement.",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "crates/lia-cli/tests/m5_linux_confinement.rs + crates/lia-adapters/src/confinement.rs"
     }
   ]
 }

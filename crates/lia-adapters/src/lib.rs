@@ -1,6 +1,7 @@
 mod assurance;
 mod claude_code;
 mod codex;
+mod confinement;
 mod conformance;
 mod contracts;
 mod cursor;
@@ -24,6 +25,10 @@ pub use claude_code::{
 pub use codex::{
     handle_jsonrpc, handle_jsonrpc_opt, proxy_tool_call, proxy_tool_names, serve_mcp_stdio,
     serve_mcp_stdio_io, JsonRpcRequest, ProxyCallResult, MCP_PROTOCOL_VERSION, MCP_SERVER_NAME,
+};
+pub use confinement::{
+    credential_read, internal_confined_exec, spawn_linux_confined, ConfinementReport,
+    CredentialSpec, LinuxConfinementOptions,
 };
 pub use conformance::{assert_adapter, load_suite, ConformanceReport, SuiteManifest};
 pub use contracts::{

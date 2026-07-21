@@ -18,19 +18,23 @@ requires commercial / POST-L6 surfaces. Source capability rollup:
 | Process-terminal binding | pre-action contract receipt + signed execution-manifest digest | `process-contract-validate`, generic wrap |
 | Optional public blob check | digest-pinned external cosign + identity/issuer pins + input hashes | `public-verify` |
 | Bounded dependency observation | fixed official HTTPS origins + pinned client; pinned/fresh offline replay | `registry-evidence` for crates.io/npm |
+| Opt-in IP-egress CONFINE | attested fresh network namespace with no external interface | one `lia wrap --linux-confine` process on a supported Linux host |
+| Opt-in path-write CONFINE | private mount namespace + read-only evidence bind + Landlock write allow-rule only below worktree | one attested confined wrap; pre-opened descriptors excluded |
+| Scoped credential delivery | private single-link source, exact-path mask, one-shot expiring FD broker | one attested confined wrap; same-uid global secrecy not claimed |
 
 ## Non-guarantees (honest CANNOT-OBSERVE / deferred)
 
 | Non-guarantee | Why | Where to buy / wait |
 |---------------|-----|---------------------|
 | Complete mediation | Hooks/MCP are bypassable without process confine | LIA / POST-L6 CONFINE |
-| Network egress PREVENT | No egress hook in Claude/Codex v1 | POST-L6 / host sandbox |
-| Credential broker | Not in Kernel | POST-L6 |
+| Network egress PREVENT for hook/MCP or unwrapped processes | Hooks have no egress boundary | Use the opt-in Linux wrapper or a host sandbox |
+| Every network/IPC transport | Fresh netns blocks IP; this backend does not install Landlock network/IPC rights, so pathname Unix sockets remain outside the claim | Separate IPC policy / host sandbox |
+| Credential secrecy from the same OS uid | Exact source is masked, but other same-uid processes and undeclared hard paths remain outside the boundary | Separate principal / keystore |
 | Registry response transparency-log authenticity | HTTPS observation is not a registry-signed statement | External registry transparency/signature system |
 | Subagent full visibility | Partial keys only | LIA multi-agent |
 | Auto-repair after deny | Closed (LIA) | Commercial Harness |
 | Claim extraction from free text | Closed (LIA) | Commercial Harness |
-| CONFINE / namespaces | Forbidden claim in v1 | POST-L6 |
+| Cross-platform CONFINE | Linux backend only | Windows/macOS backend research |
 | Byte-replay of cloud model | Trace-authenticated only (HL-3) | N/A |
 
 ## Upsell pointer

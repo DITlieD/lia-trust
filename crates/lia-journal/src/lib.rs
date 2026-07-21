@@ -995,6 +995,7 @@ struct RotationBridge {
 fn event_timestamp(event: &Event) -> &DateTime<Utc> {
     match event {
         Event::ProcessContractDeclared(value) => &value.timestamp,
+        Event::ConfinementApplied(value) => &value.timestamp,
         Event::ActionAttempted(value) => &value.timestamp,
         Event::ActionObserved(value) => &value.timestamp,
         Event::GateVerdict(value) => &value.timestamp,

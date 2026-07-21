@@ -55,6 +55,7 @@ pub enum RiskTier {
 #[serde(deny_unknown_fields)]
 pub enum Event {
     ProcessContractDeclared(ProcessContractDeclared),
+    ConfinementApplied(ConfinementApplied),
     ActionAttempted(ActionAttempted),
     ActionObserved(ActionObserved),
     GateVerdict(GateVerdictEvent),
@@ -70,6 +71,23 @@ pub struct ProcessContractDeclared {
     pub contract_id: Uuid,
     pub contract_version: String,
     pub contract_sha256: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ConfinementApplied {
+    pub backend: String,
+    pub helper_sha256: String,
+    pub network_namespace: String,
+    pub mount_namespace: String,
+    pub pid_namespace: String,
+    pub landlock_abi: u32,
+    pub ip_egress_blocked: bool,
+    pub host_path_writes_blocked: bool,
+    pub evidence_artifacts_write_blocked: bool,
+    pub attestation_sha256: String,
+    pub credential_names: Vec<String>,
     pub timestamp: DateTime<Utc>,
 }
 
