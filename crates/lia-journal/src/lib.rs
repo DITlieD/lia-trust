@@ -126,6 +126,34 @@ impl SigningIdentity {
             public_key_hex: self.public_key_hex(),
         }
     }
+
+    /// Detached Ed25519 signature over arbitrary bytes, hex-encoded. Used to bind
+    /// out-of-journal bundle artifacts (the manifest) to the signing identity.
+    pub fn sign_hex(&self, message: &[u8]) -> String {
+        hex::encode(self.signing_key.sign(message).to_bytes())
+    }
+}
+
+/// A fresh 32-byte secret as hex, drawn from the OS CSPRNG. FAILS HARD if the OS RNG is
+/// unavailable rather than falling back to a predictable source: a low-entropy signing key
+/// silently undermines every signature the kernel produces.
+pub fn random_secret_hex() -> Result<String, JournalError> {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut bytes)
+        .map_err(|e| JournalError::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
+    Ok(hex::encode(bytes))
+}
+
+/// Verify a detached hex Ed25519 signature over `message` against a hex public key.
+/// Uses `verify_strict` (rejects malleable/non-canonical signatures and small-order keys).
+pub fn verify_detached(
+    public_key_hex: &str,
+    message: &[u8],
+    signature_hex: &str,
+) -> Result<(), JournalError> {
+    verify_ed25519_signature(public_key_hex, message, signature_hex)
 }
 
 impl Journal {
@@ -351,6 +379,9 @@ impl Journal {
                 || receipt.signature_hex != signature_hex
                 || receipt.gate_manifest_version != gate_manifest_version
                 || receipt.signer != signer
+                // bind the receipt envelope's run_id to the row's signed run_id, so a
+                // forged receipt.run_id (a field consumers key off) cannot disagree.
+                || receipt.run_id != run_id
             {
                 return Err(JournalError::Integrity(format!(
                     "receipt fields disagree with row at seq {seq}"

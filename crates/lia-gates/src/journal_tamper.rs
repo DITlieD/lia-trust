@@ -3,6 +3,12 @@ use serde_json::json;
 
 use crate::{make_outcome, GateConfig, GateError, GateOutcome, GateRequest};
 
+// SCOPE: this gate is a STRUCTURAL chain probe over supplied row summaries (seq continuity,
+// prev_hash linkage, cross-session run_id, duplicate row_hash). It does NOT recompute
+// row_hash from event bytes or verify Ed25519 signatures — those live in
+// `lia_journal::verify_chain` (driven by `lia journal-verify` / `lia verify`), which is the
+// cryptographic, un-forgeable check. Do not read a pass here as "content-tamper detected";
+// it detects reorder/gap/dup/cross-session, a strictly weaker property than the real verify.
 pub fn check_journal_tamper(
     request: &GateRequest,
     config: &GateConfig,

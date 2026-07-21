@@ -25,6 +25,7 @@ pub const REASON_CODES: &[&str] = &[
     "REPLAY_MISMATCH",
     "RULE_CONDITION_FAILED",
     "SIGNATURE_INVALID",
+    "TRUST_ANCHOR_MISMATCH",
     "TRUST_ROOT_MISSING",
 ];
 
@@ -287,7 +288,10 @@ fn evaluate_rule(rule: &Rule, evidence: &EvidenceSet) -> Result<RuleResult, Poli
 fn check_requirement(req: &EvidenceRequirement, item: &EvidenceItem) -> Result<(), String> {
     match req.kind {
         EvidenceKind::Present => {
-            let present = item.sha256.is_some() || item.value.is_some() || item.bytes.is_some();
+            // vacuous presence (an empty string, zero bytes) is not evidence
+            let present = item.sha256.as_deref().is_some_and(|s| !s.is_empty())
+                || item.value.as_deref().is_some_and(|s| !s.is_empty())
+                || item.bytes.is_some_and(|b| b > 0);
             if present {
                 Ok(())
             } else {

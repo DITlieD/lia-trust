@@ -22,9 +22,14 @@ pub const CC_TOOL_WRITE: &str = "Write";
 pub const CC_TOOL_EDIT: &str = "Edit";
 pub const CC_TOOL_READ: &str = "Read";
 pub const CC_TOOL_AGENT: &str = "Agent";
+pub const CC_TOOL_MULTI_EDIT: &str = "MultiEdit";
+pub const CC_TOOL_NOTEBOOK_EDIT: &str = "NotebookEdit";
 pub const CC_INPUT_COMMAND: &str = "command";
 pub const CC_INPUT_FILE_PATH: &str = "file_path";
+pub const CC_INPUT_NOTEBOOK_PATH: &str = "notebook_path";
 pub const CC_INPUT_CONTENT: &str = "content";
+pub const CC_INPUT_NEW_SOURCE: &str = "new_source";
+pub const CC_INPUT_EDITS: &str = "edits";
 
 pub const MCP_JSONRPC: &str = "2.0";
 pub const MCP_METHOD_LIST: &str = "tools/list";

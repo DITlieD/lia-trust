@@ -201,9 +201,18 @@ pub fn reject_command_substitution(s: &str) -> Result<(), ExpandError> {
             continue;
         }
         if c == '$' && i + 1 < chars.len() && chars[i + 1] == '(' {
+            // `$((` is arithmetic expansion, not command execution; `$(` alone runs a command.
+            if i + 2 < chars.len() && chars[i + 2] == '(' {
+                i += 3;
+                continue;
+            }
             return Err(ExpandError::CommandSubstitution(s.to_string()));
         }
         if c == '`' {
+            return Err(ExpandError::CommandSubstitution(s.to_string()));
+        }
+        // process substitution `<(cmd)` / `>(cmd)` also executes a command
+        if (c == '<' || c == '>') && i + 1 < chars.len() && chars[i + 1] == '(' {
             return Err(ExpandError::CommandSubstitution(s.to_string()));
         }
         i += 1;
@@ -412,6 +421,21 @@ mod tests {
         assert!(reject_command_substitution("echo $(rm -rf /)").is_err());
         assert!(reject_command_substitution("echo \"$(rm -rf /)\"").is_err());
         assert!(reject_command_substitution("echo \"`rm -rf /`\"").is_err());
+    }
+
+    #[test]
+    fn rejects_process_substitution() {
+        assert!(reject_command_substitution("diff <(sort a) <(sort b)").is_err());
+        assert!(reject_command_substitution("tee >(rm -rf /tmp/x)").is_err());
+    }
+
+    #[test]
+    fn allows_arithmetic_expansion() {
+        // `$((` is arithmetic, not command execution; over-blocking it is a usability bug
+        assert!(reject_command_substitution("echo $((1 + 2))").is_ok());
+        assert!(reject_command_substitution("n=$(( RANDOM % 10 ))").is_ok());
+        // but `$(` alone is still command substitution
+        assert!(reject_command_substitution("echo $( id )").is_err());
     }
 
     #[test]

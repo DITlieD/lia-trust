@@ -744,6 +744,7 @@ dependencies = [
  "lia-policy",
  "lia-protocol",
  "rand",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_yaml",

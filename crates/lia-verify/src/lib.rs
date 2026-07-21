@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 pub const BUNDLE_VERSION: &str = "lia-bundle-v1";
 pub const VERIFICATION_REPORT_VERSION: &str = "lia-verification-report-v1";
+pub const MANIFEST_SIG_NAME: &str = "MANIFEST.sig";
 
 #[derive(Debug, Error)]
 pub enum VerifyError {
@@ -46,6 +47,41 @@ pub enum VerifyError {
 #[serde(deny_unknown_fields)]
 pub struct TrustRoot {
     pub keys: Vec<SignerIdentity>,
+}
+
+/// An EXTERNAL set of trusted signer public keys, supplied out-of-band (a pinned
+/// trust-root file, a `--journal-pubkey`, the installer's `~/.lia-trust/trust-root.json`).
+/// A bundle is AUTHENTIC only when every signer is in this set. Without an anchor the
+/// verifier can prove integrity (untampered-since-signing) but NOT authenticity, because
+/// the in-bundle trust-root is supplied by whoever produced the bundle.
+#[derive(Debug, Clone, Default)]
+pub struct TrustAnchor {
+    pub public_keys: std::collections::BTreeSet<String>,
+}
+
+impl TrustAnchor {
+    /// Build an anchor from a trust-root JSON file OUTSIDE any bundle.
+    pub fn from_trust_root_file(path: impl AsRef<Path>) -> Result<Self, VerifyError> {
+        let root = load_trust_root(path)?;
+        Ok(Self::from_public_keys(
+            root.keys.into_iter().map(|k| k.public_key_hex),
+        ))
+    }
+
+    /// Build an anchor from explicit hex public keys.
+    pub fn from_public_keys<I: IntoIterator<Item = String>>(keys: I) -> Self {
+        TrustAnchor {
+            public_keys: keys.into_iter().collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.public_keys.is_empty()
+    }
+
+    pub fn trusts(&self, public_key_hex: &str) -> bool {
+        self.public_keys.contains(public_key_hex)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -86,6 +122,14 @@ pub struct BundleManifest {
     pub assurance_level: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// Row count at seal time. Bound into the manifest signature so tail-truncation
+    /// (dropping validly-signed rows) is detectable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journal_rows: Option<u64>,
+    /// Relative path to the detached Ed25519 signature over this manifest's bytes,
+    /// produced by the journal signer. Its presence marks a sealed bundle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_sig_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -111,9 +155,32 @@ pub struct VerificationReport {
     pub verifier: SignerIdentity,
     pub signature_hex: String,
     pub timestamp: DateTime<Utc>,
+    /// True only when an EXTERNAL pinned trust anchor was supplied AND every signer
+    /// (journal + verifier) is in it. Integrity (`accepted`) never implies authenticity.
+    #[serde(default)]
+    pub authenticated: bool,
+    /// "pinned" (anchor matched), "self-rooted" (no external anchor: integrity only),
+    /// or "mismatch" (anchor supplied but a signer was not trusted).
+    #[serde(default)]
+    pub authenticity: String,
+    /// True when the bundle carries a valid detached manifest signature binding the
+    /// evidence list + row count to the journal signer (sealed vs legacy unsealed).
+    #[serde(default)]
+    pub sealed: bool,
 }
 
+/// Integrity-only verification (no external trust anchor). The resulting report has
+/// `authenticated == false` / `authenticity == "self-rooted"`: it proves the bundle is
+/// internally consistent and untampered-since-signing, NOT who produced it. For
+/// authenticity, use `verify_bundle_with_anchor` with a pinned key set.
 pub fn verify_bundle(bundle_dir: impl AsRef<Path>) -> Result<VerificationReport, VerifyError> {
+    verify_bundle_with_anchor(bundle_dir, None)
+}
+
+pub fn verify_bundle_with_anchor(
+    bundle_dir: impl AsRef<Path>,
+    anchor: Option<&TrustAnchor>,
+) -> Result<VerificationReport, VerifyError> {
     let bundle_dir = bundle_dir.as_ref();
     let manifest = load_manifest(bundle_dir)?;
     if manifest.bundle_version != BUNDLE_VERSION {
@@ -293,6 +360,92 @@ pub fn verify_bundle(bundle_dir: impl AsRef<Path>) -> Result<VerificationReport,
         None
     };
 
+    // --- Manifest seal: a detached signature over the manifest binds the evidence list,
+    //     policy_hash, and row count to the journal signer. Dropping an evidence entry or
+    //     truncating the journal tail then fails either the signature or the row-count check.
+    let journal_pubkey = trust_root
+        .keys
+        .iter()
+        .find(|k| k.key_id == signing_config.journal_signer_key_id)
+        .map(|k| k.public_key_hex.clone());
+    let mut sealed = false;
+    if let Some(sig_rel) = manifest.manifest_sig_path.clone() {
+        let manifest_bytes = fs::read(bundle_dir.join("MANIFEST.json"))?;
+        match (
+            journal_pubkey.as_deref(),
+            fs::read_to_string(bundle_dir.join(&sig_rel)),
+        ) {
+            (Some(pk), Ok(sig_hex)) => {
+                if lia_journal::verify_detached(pk, &manifest_bytes, sig_hex.trim()).is_err() {
+                    accepted = false;
+                    if reason_code == "ACCEPTED" {
+                        reason_code = "SIGNATURE_INVALID".into();
+                    }
+                    findings.push(finding(
+                        "SIGNATURE_INVALID",
+                        "manifest signature does not verify against the journal signer",
+                    ));
+                } else {
+                    sealed = true;
+                    match manifest.journal_rows {
+                        Some(n) if n == journal_rows => {}
+                        other => {
+                            accepted = false;
+                            if reason_code == "ACCEPTED" {
+                                reason_code = "JOURNAL_INTEGRITY_FAILED".into();
+                            }
+                            findings.push(finding(
+                                "JOURNAL_INTEGRITY_FAILED",
+                                format!(
+                                    "sealed journal_rows {:?} != actual {}",
+                                    other, journal_rows
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                accepted = false;
+                if reason_code == "ACCEPTED" {
+                    reason_code = "SIGNATURE_INVALID".into();
+                }
+                findings.push(finding(
+                    "SIGNATURE_INVALID",
+                    "manifest declares a signature but it or the journal key is unreadable",
+                ));
+            }
+        }
+    }
+
+    // --- Authenticity: an integrity-valid bundle only proves WHO produced it when an
+    //     EXTERNAL trust anchor pins the signer keys. Without one, the in-bundle trust-root
+    //     is self-asserted, so `authenticated` stays false ("self-rooted").
+    let verifier_pubkey = verifier_key.public_key_hex.clone();
+    let (authenticated, authenticity) = match anchor {
+        Some(a) => {
+            let journal_ok = journal_pubkey
+                .as_deref()
+                .map(|pk| a.trusts(pk))
+                .unwrap_or(false);
+            let verifier_ok = a.trusts(&verifier_pubkey);
+            if journal_ok && verifier_ok {
+                (true, "pinned".to_string())
+            } else {
+                accepted = false;
+                if reason_code == "ACCEPTED" {
+                    reason_code = "TRUST_ANCHOR_MISMATCH".into();
+                }
+                findings.push(finding(
+                    "TRUST_ANCHOR_MISMATCH",
+                    "a bundle signer key is not in the supplied external trust anchor",
+                ));
+                (false, "mismatch".to_string())
+            }
+        }
+        None => (false, "self-rooted".to_string()),
+    };
+
     if !accepted && reason_code == "ACCEPTED" {
         reason_code = "REJECTED".into();
     }
@@ -316,6 +469,9 @@ pub fn verify_bundle(bundle_dir: impl AsRef<Path>) -> Result<VerificationReport,
         verifier: verifier_key.clone(),
         signature_hex: String::new(),
         timestamp: Utc::now(),
+        authenticated,
+        authenticity,
+        sealed,
     };
 
     report.accepted = accepted && reason_code == "ACCEPTED";
@@ -324,6 +480,37 @@ pub fn verify_bundle(bundle_dir: impl AsRef<Path>) -> Result<VerificationReport,
     }
 
     Ok(report)
+}
+
+/// Seal a bundle: stamp the actual journal row count into the manifest, then write a
+/// detached Ed25519 signature (`MANIFEST.sig`) over the manifest bytes signed by the
+/// journal identity. This binds the evidence list, policy hash, and row count to the
+/// same key that signs the journal, so dropping an evidence entry or truncating the
+/// journal tail fails verification (with an external anchor, un-forgeably).
+pub fn seal_manifest(
+    bundle_dir: &Path,
+    mut manifest: BundleManifest,
+    journal_identity: &SigningIdentity,
+) -> Result<(), VerifyError> {
+    let rows = Journal::open_readonly(bundle_dir.join(&manifest.journal_path))?.load_rows()?;
+    manifest.journal_rows = Some(rows.len() as u64);
+    manifest.manifest_sig_path = Some(MANIFEST_SIG_NAME.to_string());
+    let bytes = serde_json::to_vec_pretty(&manifest)?;
+    fs::write(bundle_dir.join("MANIFEST.json"), &bytes)?;
+    let sig = journal_identity.sign_hex(&bytes);
+    fs::write(bundle_dir.join(MANIFEST_SIG_NAME), sig)?;
+    Ok(())
+}
+
+/// Re-seal a bundle whose on-disk MANIFEST.json was rewritten after initial sealing
+/// (e.g. bench appends evidence entries post-build). Reads the current manifest and
+/// re-signs it so the signature always covers the final bytes.
+pub fn reseal_bundle(
+    bundle_dir: &Path,
+    journal_identity: &SigningIdentity,
+) -> Result<(), VerifyError> {
+    let manifest = load_manifest(bundle_dir)?;
+    seal_manifest(bundle_dir, manifest, journal_identity)
 }
 
 pub fn sign_verification_report(
@@ -483,11 +670,10 @@ rules:
         evidence_set_path: Some("evidence-set.json".into()),
         assurance_level: None,
         mode: None,
+        journal_rows: None,
+        manifest_sig_path: None,
     };
-    fs::write(
-        bundle_dir.join("MANIFEST.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    seal_manifest(bundle_dir, manifest, journal_identity)?;
 
     let _ = frozen;
     Ok((bundle_dir.to_path_buf(), run_id))
@@ -572,11 +758,10 @@ rules:
         evidence_set_path: None,
         assurance_level: None,
         mode: None,
+        journal_rows: None,
+        manifest_sig_path: None,
     };
-    fs::write(
-        bundle_dir.join("MANIFEST.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    seal_manifest(bundle_dir, manifest, journal_identity)?;
 
     Ok(bundle_dir.to_path_buf())
 }
@@ -733,11 +918,10 @@ rules:
         evidence_set_path: Some("evidence-set.json".into()),
         assurance_level: Some(ASSURANCE_AUDIT.into()),
         mode: Some(MODE_VERIFY_RUN.into()),
+        journal_rows: None,
+        manifest_sig_path: None,
     };
-    fs::write(
-        bundle_dir.join("MANIFEST.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
+    seal_manifest(bundle_dir, manifest, opts.journal_identity)?;
 
     Ok((bundle_dir.to_path_buf(), run_id))
 }
@@ -1094,6 +1278,100 @@ mod tests {
         sign_verification_report(&mut report, &verifier_id).expect("sign");
         verify_report_signature(&report).expect("sig");
         assert!(report.accepted);
+    }
+
+    #[test]
+    fn forged_bundle_rejected_by_external_anchor() {
+        // C-1: an attacker builds a fully self-consistent bundle signed with THEIR OWN
+        // keys. Integrity-only verify accepts it (self-rooted). But an external anchor
+        // pinning the HONEST key rejects it: authenticity, not just integrity.
+        let dir = tempfile::tempdir().expect("tmpdir");
+        let honest_journal = SigningIdentity::generate("journal");
+        let honest_verifier = SigningIdentity::generate("verifier");
+        let attacker_journal = SigningIdentity::generate("journal");
+        let attacker_verifier = SigningIdentity::generate("verifier");
+        let (bundle, _) =
+            build_demo_bundle(dir.path(), &attacker_journal, &attacker_verifier).expect("build");
+
+        // integrity-only: accepted but NOT authenticated
+        let report = verify_bundle(&bundle).expect("verify");
+        assert!(report.accepted);
+        assert!(!report.authenticated);
+        assert_eq!(report.authenticity, "self-rooted");
+
+        // pin the honest keys as the external anchor -> forged bundle is rejected
+        let anchor = TrustAnchor::from_public_keys([
+            honest_journal.public_key_hex(),
+            honest_verifier.public_key_hex(),
+        ]);
+        let report = verify_bundle_with_anchor(&bundle, Some(&anchor)).expect("verify");
+        assert!(!report.accepted, "forged bundle must be rejected under a pinned anchor");
+        assert_eq!(report.reason_code, "TRUST_ANCHOR_MISMATCH");
+        assert_eq!(report.authenticity, "mismatch");
+
+        // the honest producer's own bundle authenticates against the same anchor
+        let dir2 = tempfile::tempdir().expect("tmpdir");
+        let (good, _) =
+            build_demo_bundle(dir2.path(), &honest_journal, &honest_verifier).expect("build");
+        let report = verify_bundle_with_anchor(&good, Some(&anchor)).expect("verify");
+        assert!(report.accepted && report.authenticated);
+        assert_eq!(report.authenticity, "pinned");
+    }
+
+    #[test]
+    fn tail_truncation_rejected() {
+        // H-3: dropping validly-signed rows from the tail leaves a valid chain, but the
+        // sealed manifest fixes the row count, so verify rejects the truncated journal.
+        let dir = tempfile::tempdir().expect("tmpdir");
+        let journal_id = SigningIdentity::generate("journal");
+        let verifier_id = SigningIdentity::generate("verifier");
+        let (bundle, _) =
+            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        assert!(verify_bundle(&bundle).expect("verify").sealed);
+
+        // delete the last journal row directly (drop the append-only triggers first)
+        let db = bundle.join("journal.db");
+        let conn = rusqlite::Connection::open(&db).expect("open");
+        conn.execute_batch(
+            "DROP TRIGGER IF EXISTS journal_rows_no_update;
+             DROP TRIGGER IF EXISTS journal_rows_no_delete;
+             DELETE FROM journal_rows WHERE seq = (SELECT MAX(seq) FROM journal_rows);",
+        )
+        .expect("truncate");
+        drop(conn);
+        // also trim the action-stream so the replay length check passes; this isolates
+        // the sealed row-count guard as the leg that catches the truncation.
+        let stream_path = bundle.join("action-stream.jsonl");
+        let stream = fs::read_to_string(&stream_path).expect("stream");
+        let mut lines: Vec<&str> = stream.lines().filter(|l| !l.trim().is_empty()).collect();
+        lines.pop();
+        fs::write(&stream_path, format!("{}\n", lines.join("\n"))).expect("rewrite stream");
+
+        let report = verify_bundle(&bundle).expect("verify");
+        assert!(!report.accepted, "tail-truncated journal must be rejected");
+        assert_eq!(report.reason_code, "JOURNAL_INTEGRITY_FAILED");
+    }
+
+    #[test]
+    fn evidence_drop_from_sealed_manifest_rejected() {
+        // #2: removing an evidence entry from the manifest breaks the detached signature.
+        let dir = tempfile::tempdir().expect("tmpdir");
+        let journal_id = SigningIdentity::generate("journal");
+        let verifier_id = SigningIdentity::generate("verifier");
+        let (bundle, _) =
+            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+
+        let mut manifest = load_manifest(&bundle).expect("manifest");
+        manifest.evidence.clear(); // attacker drops evidence, leaves MANIFEST.sig intact
+        fs::write(
+            bundle.join("MANIFEST.json"),
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .expect("rewrite");
+
+        let report = verify_bundle(&bundle).expect("verify");
+        assert!(!report.accepted, "evidence drop must break the manifest seal");
+        assert_eq!(report.reason_code, "SIGNATURE_INVALID");
     }
 
     #[test]

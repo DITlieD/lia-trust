@@ -7,9 +7,10 @@ use uuid::Uuid;
 use crate::contracts::{
     CC_DECISION_ALLOW, CC_DECISION_DENY, CC_FIELD_CWD, CC_FIELD_HOOK_EVENT_NAME,
     CC_FIELD_SESSION_ID, CC_FIELD_TOOL_INPUT, CC_FIELD_TOOL_NAME, CC_FIELD_TOOL_USE_ID,
-    CC_HOOK_EVENT_PRE_TOOL_USE, CC_INPUT_COMMAND, CC_INPUT_CONTENT, CC_INPUT_FILE_PATH,
-    CC_OUT_HOOK_EVENT_NAME, CC_OUT_HOOK_SPECIFIC, CC_OUT_PERMISSION_DECISION,
-    CC_OUT_PERMISSION_REASON, CC_TOOL_AGENT, CC_TOOL_BASH, CC_TOOL_EDIT, CC_TOOL_READ,
+    CC_HOOK_EVENT_PRE_TOOL_USE, CC_INPUT_COMMAND, CC_INPUT_CONTENT, CC_INPUT_EDITS,
+    CC_INPUT_FILE_PATH, CC_INPUT_NEW_SOURCE, CC_INPUT_NOTEBOOK_PATH, CC_OUT_HOOK_EVENT_NAME,
+    CC_OUT_HOOK_SPECIFIC, CC_OUT_PERMISSION_DECISION, CC_OUT_PERMISSION_REASON, CC_TOOL_AGENT,
+    CC_TOOL_BASH, CC_TOOL_EDIT, CC_TOOL_MULTI_EDIT, CC_TOOL_NOTEBOOK_EDIT, CC_TOOL_READ,
     CC_TOOL_WRITE,
 };
 use crate::dispatch::{denial_summary, dispatch_action, DispatchResult, RunContext};
@@ -121,6 +122,52 @@ pub fn map_tool_to_action(input: &PreToolUseInput) -> Result<(ActionKind, GatePa
                 .to_string();
             let text = ti
                 .get(CC_INPUT_CONTENT)
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string());
+            Ok((
+                ActionKind::WriteFile,
+                GatePayload {
+                    path: Some(path),
+                    is_write: Some(true),
+                    text,
+                    cwd: input.cwd.clone(),
+                    ..GatePayload::default()
+                },
+            ))
+        }
+        CC_TOOL_MULTI_EDIT => {
+            let path = ti
+                .get(CC_INPUT_FILE_PATH)
+                .and_then(|x| x.as_str())
+                .ok_or_else(|| AdapterError::Invalid("MultiEdit missing file_path".into()))?
+                .to_string();
+            let text = ti.get(CC_INPUT_EDITS).and_then(|e| e.as_array()).map(|edits| {
+                edits
+                    .iter()
+                    .filter_map(|edit| edit.get("new_string").and_then(|x| x.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
+            Ok((
+                ActionKind::WriteFile,
+                GatePayload {
+                    path: Some(path),
+                    is_write: Some(true),
+                    text,
+                    cwd: input.cwd.clone(),
+                    ..GatePayload::default()
+                },
+            ))
+        }
+        CC_TOOL_NOTEBOOK_EDIT => {
+            let path = ti
+                .get(CC_INPUT_NOTEBOOK_PATH)
+                .or_else(|| ti.get(CC_INPUT_FILE_PATH))
+                .and_then(|x| x.as_str())
+                .ok_or_else(|| AdapterError::Invalid("NotebookEdit missing notebook_path".into()))?
+                .to_string();
+            let text = ti
+                .get(CC_INPUT_NEW_SOURCE)
                 .and_then(|x| x.as_str())
                 .map(|s| s.to_string());
             Ok((

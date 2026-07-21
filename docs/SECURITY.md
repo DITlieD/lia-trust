@@ -20,19 +20,32 @@ exploit detail):
 ## What LIA guarantees (and does not)
 
 - **Does:** fail-closed gates on actions that reach the adapter boundary;
-  signed journal rows; offline verify detects chain/signature tamper.
-- **Does not:** complete process confinement, network egress PREVENT, or
-  protection when the host harness never invokes the hook/MCP path.
+  signed journal rows; offline verify recomputes the chain from bytes and detects
+  tamper; a signed manifest seal binds the evidence list + row count (tail-truncation
+  and evidence-drop are caught).
+- **Does (with an external anchor):** authenticity — that a bundle was produced by a
+  signer you pinned (`lia verify --trust-root <path>` / `--require-authenticity`).
+- **Does not:** authenticity WITHOUT a pinned key (the in-bundle trust-root is
+  self-asserted, so integrity-only verify proves consistency, not who signed);
+  complete process confinement; network egress PREVENT; protection when the host
+  harness never invokes the hook/MCP path; a signing key against an agent sharing the
+  operator's uid.
 
-See `docs/threat-model.md` and `docs/guarantee-matrix.md`.
+See `docs/threat-model.md` (Authenticity vs integrity, Known limitations) and
+`docs/guarantee-matrix.md`.
 
 ## Hardening expectations for operators
 
 1. Install with `lia install` so state lives under `~/.lia-trust` (mode 0600 keys).
 2. Keep the `lia` binary and wrappers outside agent write roots.
-3. Run `lia journal-verify` / `lia verify` off-agent after sensitive sessions.
-4. Never claim CONFINE or complete mediation for Claude Code / Codex in v1.
-5. Do not pool recorded and live MEASURED catch metrics in public docs.
+3. Run `lia journal-verify` / `lia verify` off-agent after sensitive sessions, and pass
+   `--trust-root` (or `--require-authenticity` for a third-party bundle) so verify
+   checks authenticity, not just integrity.
+4. If you need a hard guarantee against the *agent itself* forging journal rows, run the
+   signer under a SEPARATE uid/principal the agent cannot read — a same-uid 0600 key is
+   readable by the agent (this is why v1 tops out at GATE, not CONFINE).
+5. Never claim CONFINE or complete mediation for Claude Code / Codex in v1.
+6. Do not pool recorded and live MEASURED catch metrics in public docs.
 
 ## Supply chain
 

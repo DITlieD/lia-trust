@@ -66,10 +66,14 @@ pub fn check_secret_output(request: &GateRequest) -> Result<GateOutcome, GateErr
 fn detect_secrets(text: &str) -> Vec<String> {
     let mut hits = Vec::new();
     let patterns: &[(&str, &str)] = &[
-        (r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", "private_key"),
-        (r"AKIA[0-9A-Z]{16}", "aws_access_key"),
+        // any PEM private key header (RSA/EC/DSA/OPENSSH/ENCRYPTED/PGP ... PRIVATE KEY)
+        (r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY", "private_key"),
+        // AWS long-term (AKIA) and STS temporary (ASIA) access-key ids
+        (r"A[KS]IA[0-9A-Z]{16}", "aws_access_key"),
         (r"(?i)aws_secret_access_key\s*=\s*\S+", "aws_secret"),
-        (r"ghp_[A-Za-z0-9]{36}", "github_pat"),
+        // GitHub PAT (ghp_), oauth (gho_), user (ghu_), server (ghs_), refresh (ghr_), fine-grained
+        (r"gh[opsur]_[A-Za-z0-9]{36}", "github_token"),
+        (r"github_pat_[A-Za-z0-9_]{22,}", "github_fine_grained_pat"),
         (r"xox[baprs]-[A-Za-z0-9-]{10,}", "slack_token"),
         (r"(?i)api[_-]?key\s*[:=]\s*\S{16,}", "api_key"),
         (r"(?i)password\s*[:=]\s*\S{8,}", "password"),
@@ -82,6 +86,12 @@ fn detect_secrets(text: &str) -> Vec<String> {
         (r"\bAIza[0-9A-Za-z_\-]{20,}\b", "google_api_key"),
         // HuggingFace
         (r"\bhf_[A-Za-z0-9]{20,}\b", "huggingface_token"),
+        // Stripe live secret / restricted keys
+        (r"\b[sr]k_live_[A-Za-z0-9]{20,}\b", "stripe_key"),
+        // JWT (three base64url segments, header begins eyJ = {"…)
+        (r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}", "jwt"),
+        // credentials embedded in a URI (scheme://user:pass@host)
+        (r"://[^/\s:@]+:[^/\s@]+@", "uri_credentials"),
     ];
     for (pat, kind) in patterns {
         if let Ok(re) = Regex::new(pat) {
@@ -114,6 +124,40 @@ mod tests {
         let out = check_secret_output(&req).expect("eval");
         assert!(matches!(out.verdict, Verdict::Deny));
         assert_eq!(out.reason_code, "SECRET_IN_OUTPUT");
+    }
+
+    #[test]
+    fn detects_additional_secret_shapes() {
+        // each of these leaked ALLOW before the coverage fix. token-shaped fixtures are
+        // split with concat! so the committed source never contains a contiguous
+        // secret-shaped literal (push-protection scans the blob, not the runtime value).
+        for s in [
+            "-----BEGIN DSA PRIVATE KEY-----",
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+            concat!("AS", "IAY34FZKBOKMUTVV7A"),
+            concat!("gh", "o_", "16C7e42F292c6912E7710c838347Ae178B4a"),
+            concat!("gh", "u_", "16C7e42F292c6912E7710c838347Ae178B4a"),
+            concat!("github", "_pat_", "11ABCDEFG0abcdefghijkl_MNOPQRSTUVWXYZ0123456789"),
+            concat!("eyJhbGciOiJIUzI1NiJ9", ".eyJzdWIiOiIxMjM0NTY3ODkwIn0", ".abcDEFghiJKLmnop"),
+            "postgres://admin:S3cr3tPass@db.internal/prod",
+            concat!("sk", "_live_", "abcdefghijklmnopqrstuvwx"),
+        ] {
+            let req = GateRequest {
+                gate_id: "secret-output".into(),
+                action_id: Uuid::new_v4(),
+                kind: None,
+                payload: crate::GatePayload {
+                    text: Some(s.into()),
+                    ..crate::GatePayload::default()
+                },
+            };
+            let out = check_secret_output(&req).expect("eval");
+            assert!(
+                matches!(out.verdict, Verdict::Deny),
+                "expected DENY for secret shape: {s}"
+            );
+        }
     }
 
     #[test]

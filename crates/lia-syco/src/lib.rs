@@ -122,7 +122,9 @@ pub fn detect(exchange: &Exchange) -> Result<SycoReport, SycoError> {
     let agent_agreed = exchange
         .agent_agreed
         .unwrap_or_else(|| mechanical_agreement(&exchange.agent_response));
-    let risk = exchange.risk.clone().unwrap_or(AgreementRisk::Low);
+    // Self-declared risk defaults to the HIGHEST tier when omitted: a caller that does not
+    // classify a claim-bearing agreement must not thereby dodge the grounding requirement.
+    let risk = exchange.risk.clone().unwrap_or(AgreementRisk::Security);
     let mut findings = Vec::new();
 
     let evidence_supports = exchange.evidence_supports_assertion.unwrap_or(false);
@@ -274,13 +276,42 @@ fn mechanical_agreement(response: &str) -> bool {
         "you're right",
         "youre right",
         "agreed",
+        "i agree",
         "that's right",
         "thats right",
+        "that is right",
+        "that's true",
+        "that is true",
+        "entirely true",
         "absolutely",
         "exactly",
-        "i agree",
+        "indeed",
+        "of course",
+        "you are correct",
+        "you're correct",
     ];
-    MARKERS.iter().any(|m| t == *m || t.starts_with(&format!("{m},")) || t.starts_with(&format!("{m} ")))
+    // match a marker anywhere on a word boundary, not only as a prefix: agreement often
+    // follows a lead-in ("Indeed, you're correct that ...") and prefix-only detection
+    // was trivially evaded.
+    MARKERS.iter().any(|m| contains_word_phrase(&t, m))
+}
+
+/// True if `phrase` occurs in `hay` bounded by non-alphanumeric edges (so "yes" matches
+/// "yes," and ". yes " but not "eyesore").
+fn contains_word_phrase(hay: &str, phrase: &str) -> bool {
+    let bytes = hay.as_bytes();
+    let mut from = 0;
+    while let Some(rel) = hay[from..].find(phrase) {
+        let start = from + rel;
+        let end = start + phrase.len();
+        let left_ok = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
+        let right_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if left_ok && right_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
 }
 
 #[cfg(test)]

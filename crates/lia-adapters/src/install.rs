@@ -17,7 +17,7 @@ pub const LIA_HOOK_MARKER: &str = "lia-trust-kernel";
 /// Codex MCP server table name.
 pub const CODEX_MCP_SERVER: &str = "lia-trust";
 /// Claude PreToolUse matcher covering gated tools.
-pub const CLAUDE_PRETOOL_MATCHER: &str = "Bash|Write|Edit|Read|Delete|MultiEdit";
+pub const CLAUDE_PRETOOL_MATCHER: &str = "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit";
 /// Install manifest filename under lia home.
 pub const MANIFEST_NAME: &str = "install-manifest.json";
 
@@ -432,31 +432,11 @@ pub fn default_probe_json(adapter: &str) -> Value {
     })
 }
 
-fn generate_secret_hex() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use std::io::Read;
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Prefer OS random if available via /dev/urandom; fall back to time+pid mix.
-    // Never fs::read the whole device — it is infinite and will hang.
-    if let Ok(mut f) = fs::File::open("/dev/urandom") {
-        let mut bytes = [0u8; 32];
-        if f.read_exact(&mut bytes).is_ok() {
-            return hex::encode(bytes);
-        }
-    }
-    let mut out = [0u8; 32];
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let pid = std::process::id();
-    for (i, b) in out.iter_mut().enumerate() {
-        let mut h = DefaultHasher::new();
-        (t, pid, i as u64).hash(&mut h);
-        *b = (h.finish() & 0xff) as u8;
-    }
-    hex::encode(out)
+fn generate_secret_hex() -> Result<String, InstallError> {
+    // OS CSPRNG only; fail hard if unavailable. A signing key derived from a predictable
+    // source (time+pid) is guessable and silently breaks every signature it produces.
+    lia_journal::random_secret_hex()
+        .map_err(|e| InstallError::Invalid(format!("cannot generate signing key: {e}")))
 }
 
 /// Full install into paths (or dry-run report without writes).
@@ -484,7 +464,7 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             .trim()
             .to_string()
     } else {
-        generate_secret_hex()
+        generate_secret_hex()?
     };
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -692,14 +672,23 @@ fn write_secret(path: &Path, secret: &str) -> Result<(), InstallError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    // Create with 0600 ATOMICALLY (not create-then-chmod): a chmod-after-create leaves a
+    // window where the signing key is world/group readable, and a failed chmod would
+    // silently leave it exposed.
+    #[cfg(unix)]
+    let mut f = {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?
+    };
+    #[cfg(not(unix))]
     let mut f = fs::File::create(path)?;
     f.write_all(secret.trim().as_bytes())?;
     f.write_all(b"\n")?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-    }
     Ok(())
 }
 

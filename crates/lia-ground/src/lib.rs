@@ -25,6 +25,7 @@ pub const GROUND_REASON_CODES: &[&str] = &[
     "GROUND_SOURCE_SPAN_MISS",
     "GROUND_SOURCE_SUPPORTED",
     "GROUND_SOURCE_TOKEN_ONLY",
+    "GROUND_SOURCE_UNTRUSTED",
     "GROUND_SYMBOL_MISSING",
     "GROUND_SYMBOL_OK",
     "GROUND_TEST_NO_RECEIPT",
@@ -84,6 +85,12 @@ pub struct Claim {
     pub wrapper: Option<WrapperObservation>,
     #[serde(default)]
     pub claimed_pass: Option<bool>,
+    /// blake3 hashes of sources the HARNESS fetched off-agent (a trusted channel). When
+    /// present, a source_supports source whose hash is not in this set is refused: the
+    /// source must be one LIA actually fetched, not one the agent supplied. Absent = the
+    /// source is self-asserted and source_supports is integrity-only, never authenticity.
+    #[serde(default)]
+    pub trusted_source_blake3: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -444,6 +451,31 @@ fn check_source_supports(
         }
     }
 
+    // Authenticity pin: when the harness supplies the set of hashes it fetched off-agent,
+    // every cited source must be in it. Without this, blake3(body)==body_blake3 only proves
+    // the agent hashed its own text correctly (self-asserted source), so a pin is the only
+    // way source_supports establishes the source is real, not agent-invented.
+    if let Some(trusted) = &claim.trusted_source_blake3 {
+        let trusted: std::collections::BTreeSet<&str> =
+            trusted.iter().map(|s| s.as_str()).collect();
+        for src in sources {
+            if !trusted.contains(src.body_blake3.as_str()) {
+                return Ok(make_result(
+                    "source_supports",
+                    action_id,
+                    Verdict::Unsupported,
+                    "GROUND_SOURCE_UNTRUSTED",
+                    Some(format!(
+                        "source {} hash not in the harness-fetched trusted set",
+                        src.source_id
+                    )),
+                    Some(src.source_id.clone()),
+                    evidence,
+                ));
+            }
+        }
+    }
+
     if citations.is_empty() {
         if token_only_present(claim_text, sources) {
             return Ok(make_result(
@@ -611,32 +643,11 @@ fn resolve_path(ctx: &GroundContext, rel: &str) -> PathBuf {
 }
 
 fn symbol_present(body: &str, symbol: &str) -> bool {
-    // Prefer declaration-shaped matches (AST-lite / word-boundary) over bare
-    // substring hits so false symbol misses drop on fixture languages (P2-16).
-    if symbol_declaration_present(body, symbol) {
-        return true;
-    }
-    let patterns = [
-        format!("fn {symbol}"),
-        format!("fn {symbol}<"),
-        format!("fn {symbol}("),
-        format!("def {symbol}"),
-        format!("def {symbol}("),
-        format!("class {symbol}"),
-        format!("struct {symbol}"),
-        format!("enum {symbol}"),
-        format!("type {symbol}"),
-        format!("const {symbol}"),
-        format!("let {symbol}"),
-        format!("function {symbol}"),
-        format!(" {symbol} ="),
-        format!("\t{symbol} ="),
-    ];
-    patterns.iter().any(|p| body.contains(p.as_str()))
-        || body.lines().any(|line| {
-            let t = line.trim();
-            t == symbol || t.starts_with(&format!("{symbol}(")) || t.starts_with(&format!("{symbol} ="))
-        })
+    // Declaration-shaped matches ONLY (line-anchored keyword + name). A bare substring, a
+    // call site, an assignment, or a mention in a comment is NOT a definition; treating it
+    // as one wrongly verified "symbol X exists". A false negative here is the safe
+    // direction (it refuses, never fabricates existence).
+    symbol_declaration_present(body, symbol)
 }
 
 /// Declaration-shaped patterns for Rust/Python/JS (not full AST; reduces
@@ -672,13 +683,20 @@ fn regex_escape(s: &str) -> String {
     out
 }
 
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 fn hl4_complete(w: &WrapperObservation) -> bool {
-    !w.stdout_sha256.is_empty()
-        && !w.stderr_sha256.is_empty()
-        && !w.argv.is_empty()
+    // require well-formed 64-hex digests, not merely non-empty strings: a fabricated
+    // receipt of arbitrary text must not read as a real wrapper observation. The
+    // load-bearing proof remains the test-integrity gate's signed journal receipt.
+    !w.argv.is_empty()
         && !w.cwd.is_empty()
-        && !w.coverage_profraw_sha256.is_empty()
-        && !w.wrapper_digest_sha256.is_empty()
+        && is_sha256_hex(&w.stdout_sha256)
+        && is_sha256_hex(&w.stderr_sha256)
+        && is_sha256_hex(&w.coverage_profraw_sha256)
+        && is_sha256_hex(&w.wrapper_digest_sha256)
 }
 
 fn span_contains_claim(span: &str, claim_text: &str) -> bool {
@@ -789,6 +807,7 @@ mod tests {
             sources: None,
             wrapper: None,
             claimed_pass: None,
+            trusted_source_blake3: None,
         };
         let r = verify_claim(&ok, &ctx).unwrap();
         assert_eq!(r.verdict, Verdict::Verified);
@@ -821,6 +840,7 @@ mod tests {
             }]),
             wrapper: None,
             claimed_pass: None,
+            trusted_source_blake3: None,
         };
         let r = verify_claim(
             &claim,
@@ -863,6 +883,7 @@ mod tests {
             }]),
             wrapper: None,
             claimed_pass: None,
+            trusted_source_blake3: None,
         };
         let r = verify_claim(
             &claim,
@@ -874,6 +895,89 @@ mod tests {
         .unwrap();
         assert_eq!(r.verdict, Verdict::Verified);
         assert_eq!(r.reason_code, "GROUND_SOURCE_SUPPORTED");
+    }
+
+    #[test]
+    fn source_supports_untrusted_source_refused() {
+        // a self-consistent but agent-supplied source is refused when a trusted set is
+        // pinned and does not contain it; and verifies when the trusted set includes it.
+        let body = "Package phantom-crate-xyz does not exist in crates.io.";
+        let hash = blake3::hash(body.as_bytes()).to_hex().to_string();
+        let excerpt = "phantom-crate-xyz does not exist";
+        let start = body.find(excerpt).unwrap();
+        let end = start + excerpt.len();
+        let base = Claim {
+            kind: ClaimKind::SourceSupports,
+            path: None,
+            symbol: None,
+            package: None,
+            version: None,
+            schema_path: None,
+            schema_key: None,
+            claim_text: Some(excerpt.into()),
+            citations: Some(vec![Citation {
+                source_id: "doc1".into(),
+                span_start: start,
+                span_end: end,
+                excerpt: excerpt.into(),
+            }]),
+            sources: Some(vec![FetchedSource {
+                source_id: "doc1".into(),
+                body: body.into(),
+                body_blake3: hash.clone(),
+            }]),
+            wrapper: None,
+            claimed_pass: None,
+            trusted_source_blake3: Some(vec!["some-other-hash".into()]),
+        };
+        let ctx = GroundContext {
+            root: None,
+            registry: BTreeMap::new(),
+        };
+        let r = verify_claim(&base, &ctx).unwrap();
+        assert_eq!(r.verdict, Verdict::Unsupported);
+        assert_eq!(r.reason_code, "GROUND_SOURCE_UNTRUSTED");
+
+        let trusted = Claim {
+            trusted_source_blake3: Some(vec![hash]),
+            ..base
+        };
+        let r = verify_claim(&trusted, &ctx).unwrap();
+        assert_eq!(r.verdict, Verdict::Verified);
+    }
+
+    #[test]
+    fn tests_passed_bogus_wrapper_hashes_unsupported() {
+        // a fabricated receipt of arbitrary non-hex strings must not read as a real pass
+        let claim = Claim {
+            kind: ClaimKind::TestsPassed,
+            path: None,
+            symbol: None,
+            package: None,
+            version: None,
+            schema_path: None,
+            schema_key: None,
+            claim_text: None,
+            citations: None,
+            sources: None,
+            wrapper: Some(WrapperObservation {
+                exit_code: 0,
+                stdout_sha256: "x".repeat(64),
+                stderr_sha256: "y".repeat(64),
+                argv: vec!["cargo".into(), "test".into()],
+                cwd: "/repo".into(),
+                coverage_profraw_sha256: "z".repeat(64),
+                wrapper_digest_sha256: "w".repeat(64),
+            }),
+            claimed_pass: Some(true),
+            trusted_source_blake3: None,
+        };
+        let ctx = GroundContext {
+            root: None,
+            registry: BTreeMap::new(),
+        };
+        let r = verify_claim(&claim, &ctx).unwrap();
+        assert_ne!(r.verdict, Verdict::Verified);
     }
 
     #[test]
@@ -891,6 +995,7 @@ mod tests {
             sources: None,
             wrapper: None,
             claimed_pass: Some(true),
+            trusted_source_blake3: None,
         };
         let r = verify_claim(
             &claim,
@@ -921,6 +1026,7 @@ mod tests {
             sources: None,
             wrapper: None,
             claimed_pass: None,
+            trusted_source_blake3: None,
         };
         let r = verify_claim(
             &claim,
@@ -957,6 +1063,7 @@ mod tests {
             sources: None,
             wrapper: None,
             claimed_pass: None,
+            trusted_source_blake3: None,
         };
         let r = verify_claim(&claim, &ctx).unwrap();
         assert_eq!(r.verdict, Verdict::Verified);

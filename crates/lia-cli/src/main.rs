@@ -93,6 +93,15 @@ enum Commands {
         verifier_key_id: String,
         #[arg(long)]
         report_out: Option<PathBuf>,
+        /// External trust-root JSON pinning the signer keys (authenticity). Defaults to
+        /// ~/.lia-trust/trust-root.json when present. Without an anchor, verify proves
+        /// integrity only, never authenticity.
+        #[arg(long)]
+        trust_root: Option<PathBuf>,
+        /// Fail (nonzero) unless the bundle is authenticated against an external anchor.
+        /// Use when verifying a bundle you did not produce.
+        #[arg(long, default_value_t = false)]
+        require_authenticity: bool,
     },
     #[command(name = "fixture-bundle")]
     FixtureBundle {
@@ -468,16 +477,41 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             verifier_secret_key_hex,
             verifier_key_id,
             report_out,
+            trust_root,
+            require_authenticity,
         } => {
-            let mut report = verify_bundle(&bundle)?;
+            // Resolve an external anchor: explicit --trust-root, else the installed
+            // ~/.lia-trust/trust-root.json if present. No anchor => integrity-only.
+            let anchor_path = trust_root.or_else(|| {
+                let p = default_lia_home().join("trust-root.json");
+                p.is_file().then_some(p)
+            });
+            let anchor = match &anchor_path {
+                Some(p) => Some(lia_verify::TrustAnchor::from_trust_root_file(p)?),
+                None => None,
+            };
+            let mut report = lia_verify::verify_bundle_with_anchor(&bundle, anchor.as_ref())?;
             if let Some(secret) = verifier_secret_key_hex {
                 let identity =
                     SigningIdentity::from_secret_key_hex(verifier_key_id, &secret)?;
                 sign_verification_report(&mut report, &identity)?;
                 verify_report_signature(&report)?;
             }
+            if anchor.is_none() {
+                eprintln!(
+                    "[lia] no external trust anchor: integrity verified, authenticity NOT checked \
+                     (pass --trust-root to pin the signer, or install ~/.lia-trust)"
+                );
+            }
             emit_verify_report(&report, report_out.as_ref())?;
-            if report.accepted {
+            let authenticity_ok = report.authenticated || !require_authenticity;
+            if !authenticity_ok {
+                eprintln!(
+                    "[lia] REJECTED for --require-authenticity: authenticity={}",
+                    report.authenticity
+                );
+            }
+            if report.accepted && authenticity_ok {
                 Ok(ExitCode::SUCCESS)
             } else {
                 Ok(ExitCode::from(1))
@@ -494,24 +528,12 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
         } => {
             let journal_id =
                 SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+            // The verifier key must be INDEPENDENT of the journal key: deriving it (an XOR
+            // mask, a KDF, anything) means one leaked journal secret yields both, collapsing
+            // the two-party separation. Absent an explicit verifier secret, draw fresh entropy.
             let verifier_secret = match verifier_secret_key_hex {
                 Some(s) => s,
-                None => {
-                    let mut bytes = hex::decode(&secret_key_hex).map_err(|e| {
-                        format!("secret_key_hex decode failed: {e}")
-                    })?;
-                    if bytes.len() != 32 {
-                        return Err(format!(
-                            "secret_key_hex must be 32 bytes, got {}",
-                            bytes.len()
-                        )
-                        .into());
-                    }
-                    for b in &mut bytes {
-                        *b ^= 0x5a;
-                    }
-                    hex::encode(bytes)
-                }
+                None => lia_journal::random_secret_hex()?,
             };
             let verifier_id =
                 SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;
@@ -1178,6 +1200,15 @@ fn run_report(
     Ok(ExitCode::SUCCESS)
 }
 
+/// PreToolUse fail-closed: any internal error MUST block the tool, never let it proceed.
+/// Claude Code treats exit 2 as a block (its reason is read from stderr; stdout JSON is
+/// discarded on exit 2), while exit 1 is a non-blocking error that lets the tool run.
+/// A trust kernel that errored has no basis to allow, so it denies.
+fn hook_fail_closed(reason: &str) -> ExitCode {
+    eprintln!("[lia] blocked (fail-closed): {reason}");
+    ExitCode::from(2)
+}
+
 fn run_hook(
     adapter: String,
     config: PathBuf,
@@ -1187,9 +1218,16 @@ fn run_hook(
     run_id: Option<Uuid>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     if adapter != "claude-code" {
-        return Err(format!("hook adapter {adapter} not supported; use claude-code").into());
+        return Ok(hook_fail_closed(&format!(
+            "hook adapter {adapter} not supported; use claude-code"
+        )));
     }
-    let mut cfg = load_gate_config(&config)?;
+    // Every fallible step below fails CLOSED: a hook that cannot load its policy, read
+    // its input, or evaluate a gate has no basis to allow the tool, so it blocks.
+    let mut cfg = match load_gate_config(&config) {
+        Ok(c) => c,
+        Err(e) => return Ok(hook_fail_closed(&format!("gate config load failed: {e}"))),
+    };
     let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);
     cfg.run_id = Some(run_id);
     let ctx = RunContext {
@@ -1200,17 +1238,34 @@ fn run_hook(
         key_id: Some(key_id),
     };
     let mut raw = String::new();
-    io::stdin().read_to_string(&mut raw)?;
-    let out = handle_pre_tool_stdin(&raw, &ctx)?;
+    if let Err(e) = io::stdin().read_to_string(&mut raw) {
+        return Ok(hook_fail_closed(&format!("stdin read failed: {e}")));
+    }
+    let out = match handle_pre_tool_stdin(&raw, &ctx) {
+        Ok(o) => o,
+        Err(e) => return Ok(hook_fail_closed(&format!("gate error: {e}"))),
+    };
     println!("{out}");
-    let decision: serde_json::Value = serde_json::from_str(&out)?;
-    let perm = decision
-        .pointer("/hookSpecificOutput/permissionDecision")
+    let perm = serde_json::from_str::<serde_json::Value>(&out)
+        .ok()
+        .as_ref()
+        .and_then(|d| d.pointer("/hookSpecificOutput/permissionDecision"))
         .and_then(|v| v.as_str())
-        .unwrap_or("deny");
+        .map(str::to_string)
+        .unwrap_or_else(|| "deny".to_string());
     if perm == "allow" {
         Ok(ExitCode::SUCCESS)
     } else {
+        // exit 2 blocks but discards stdout JSON; surface the reason on stderr so the
+        // model sees why it was denied.
+        let reason = serde_json::from_str::<serde_json::Value>(&out)
+            .ok()
+            .as_ref()
+            .and_then(|d| d.pointer("/hookSpecificOutput/permissionDecisionReason"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("lia denied")
+            .to_string();
+        eprintln!("[lia] denied: {reason}");
         Ok(ExitCode::from(2))
     }
 }
@@ -1505,22 +1560,10 @@ fn run_verify_run(
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let repo = repo.unwrap_or_else(|| PathBuf::from("."));
     let journal_id = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
+    // Independent verifier entropy, never derived from the journal secret (see fixture-bundle).
     let verifier_secret = match verifier_secret_key_hex {
         Some(s) => s,
-        None => {
-            let mut bytes = hex::decode(&secret_key_hex)?;
-            if bytes.len() != 32 {
-                return Err(format!(
-                    "secret_key_hex must be 32 bytes, got {}",
-                    bytes.len()
-                )
-                .into());
-            }
-            for b in &mut bytes {
-                *b ^= 0x5a;
-            }
-            hex::encode(bytes)
-        }
+        None => lia_journal::random_secret_hex()?,
     };
     let verifier_id =
         SigningIdentity::from_secret_key_hex(verifier_key_id, &verifier_secret)?;

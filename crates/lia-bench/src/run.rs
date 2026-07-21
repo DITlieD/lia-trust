@@ -19,8 +19,8 @@ use lia_protocol::{
 };
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, Exchange};
 use lia_verify::{
-    build_gate_receipt_bundle, sign_verification_report, verify_bundle, verify_report_signature,
-    BundleManifest, EvidenceEntry,
+    build_gate_receipt_bundle, reseal_bundle, sign_verification_report, verify_bundle,
+    verify_report_signature, BundleManifest, EvidenceEntry,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -665,17 +665,10 @@ pub fn write_signed_bench_bundle(
     let table = render_trust_integrity_table(&result.table);
     fs::write(bundle.join("evidence/trust-integrity.tsv"), table.as_bytes())?;
 
-    let mut verifier_bytes = hex::decode(&opts.secret_key_hex)
-        .map_err(|e| BenchError::Invalid(format!("secret hex: {e}")))?;
-    if verifier_bytes.len() != 32 {
-        return Err(BenchError::Invalid(
-            "secret_key_hex must be 32 bytes".into(),
-        ));
-    }
-    for b in &mut verifier_bytes {
-        *b ^= 0x5a;
-    }
-    let verifier_hex = hex::encode(verifier_bytes);
+    // Independent verifier entropy: never derive the "independent" verifier key from the
+    // journal secret, or one leak yields both and the two-party check is illusory.
+    let verifier_hex = lia_journal::random_secret_hex()
+        .map_err(|e| BenchError::Invalid(format!("verifier key: {e}")))?;
     let verifier_id = SigningIdentity::from_secret_key_hex("verifier", &verifier_hex)?;
 
     let mut row_count = 0u64;
@@ -751,6 +744,9 @@ pub fn write_signed_bench_bundle(
         bundle.join("MANIFEST.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
+    // the manifest changed after build_gate_receipt_bundle sealed it; re-seal so the
+    // detached signature and journal_rows cover the final bytes.
+    reseal_bundle(&bundle, journal_identity)?;
 
     let mut report = verify_bundle(&bundle)?;
     let trials: Vec<TrialRecord> =

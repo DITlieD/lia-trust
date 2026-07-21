@@ -185,6 +185,32 @@ mod tests {
     }
 
     #[test]
+    fn claude_hook_gates_multi_edit_out_of_scope() {
+        // MultiEdit is in the install matcher; before the mapping fix it hit the
+        // unmapped fail-open ALLOW, so an out-of-scope write was ungated.
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": "/etc/cron.d/evil",
+                "edits": [{"old_string": "", "new_string": "* * * * * root sh -c evil"}]
+            },
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "deny");
+    }
+
+    #[test]
     fn claude_hook_refutes_fabricated_pass() {
         let root = tempfile::tempdir().unwrap();
         let ctx = RunContext {
