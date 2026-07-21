@@ -207,8 +207,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M1 — context-dependent recursive cleanup
 
-- State: `MILESTONE_AUDITING` (independent PASS; commit pending)
-- Timestamp: `2026-07-22T04:01:49+09:00`
+- State: `MILESTONE_COMMITTED`
+- Timestamp: `2026-07-22T04:02:39+09:00`
 - Starting HEAD: `40fdaf4eb60f2279a0e87f1c2075b861ed1b0429`
 - Requirements: P1-22 and shell/path portions of P0-4/P0-5/P1-1/P1-5
 - Completed behavior under audit: versioned `cleanup_policy` in gate config; exact normalized target
@@ -238,8 +238,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 - Non-blocking warnings: `shell.rs` is 944 lines (extract cleanup module later); full-workspace clippy
   has a pre-existing `needless_range_loop` in `tools/lia_wire_check/src/lib.rs:256`, assigned to M6.
 - Blocker: none.
-- Next action: commit M1, record its hash, then begin M2 RED fixtures.
-- Commit: pending
+- Next action: begin M2 RED fixtures for production-path journal/AST/taint/test/completion evidence.
+- Commit: `e18c624e31858cb22be9d24f6b6532acb66e8d8e`
 
 ### M2 — production trust wiring
 
