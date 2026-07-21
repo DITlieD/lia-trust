@@ -36,8 +36,8 @@ failing tests/fixtures, then implementation, then an auditor verdict, then a han
 
 ## M0 — RECON / SCOPE_FROZEN
 
-- State: `SCOPE_FROZEN` (independent audit PASS; commit pending)
-- Timestamp: `2026-07-22T03:44:15+09:00`
+- State: `MILESTONE_COMMITTED`
+- Timestamp: `2026-07-22T03:44:35+09:00`
 - Branch: `main`
 - Starting HEAD: `7794cfed4f841fcad3229cb0a5563520eb7471e9`
 - Worktree before edit: clean (`git status --porcelain=v1` returned no rows)
@@ -54,8 +54,8 @@ failing tests/fixtures, then implementation, then an auditor verdict, then a han
   report file was emitted by the auditor.
 - Assurance ceiling: unchanged V1 `GATE` at visible tool boundaries; no CONFINE or complete mediation
 - Blocker: none
-- Next action: commit the audited M0 scope freeze, record its hash, then begin M1 RED fixtures
-- Milestone commit: pending
+- Next action: begin M1 with RED fixtures before production implementation
+- Milestone commit: `dcdf2528877db530484d6f83abe95bf0806ac5cc`
 
 ### Direct answer: context-dependent destructive commands
 
