@@ -365,7 +365,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 - Blocker: none.
 - Next action: begin M4 RED contracts/adapter/public-verification fixtures from current official
   interface evidence.
-- Commit: `01b957b5a4672d885fa1a6a0431c1c2ec63729bb`
+- Commit: `01b957b12f858ac128dc1c6dd316f772c7c5fdde`
 
 ### M4 — process contracts and adapter/public-verification fast-follows
 
