@@ -1,0 +1,6 @@
+{
+  "gate_id": "shell-irreversible",
+  "verdict": "deny",
+  "reason_code": "SHELL_CLEANUP_OUT_OF_SCOPE",
+  "exit_code": 2
+}

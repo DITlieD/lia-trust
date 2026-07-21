@@ -51,6 +51,11 @@ pub const GATE_REASON_CODES: &[&str] = &[
     "JOURNAL_REORDER",
     "JOURNAL_TAMPER_DETECTED",
     "SECRET_IN_OUTPUT",
+    "SHELL_CLEANUP_AMBIGUOUS",
+    "SHELL_CLEANUP_APPROVAL_REQUIRED",
+    "SHELL_CLEANUP_APPROVED",
+    "SHELL_CLEANUP_OUT_OF_SCOPE",
+    "SHELL_CLEANUP_PROTECTED_TARGET",
     "SHELL_COMMAND_SUBSTITUTION",
     "SHELL_DESTRUCTIVE",
     "SHELL_OUT_OF_SCOPE",
@@ -93,6 +98,15 @@ pub struct GateConfig {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub run_id: Option<Uuid>,
+    #[serde(default)]
+    pub cleanup_policy: Option<CleanupPolicy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CleanupPolicy {
+    pub version: u32,
+    pub approved_targets: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

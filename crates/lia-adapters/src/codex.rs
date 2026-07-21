@@ -402,6 +402,7 @@ mod tests {
                 registry: BTreeMap::new(),
                 env: BTreeMap::new(),
                 run_id: None,
+                cleanup_policy: None,
             },
             journal_path: None,
             secret_key_hex: None,

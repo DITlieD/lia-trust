@@ -1,0 +1,6 @@
+{
+  "gate_id": "shell-irreversible",
+  "action_id": "22222222-2222-4222-8222-222222222224",
+  "kind": "shell",
+  "payload": {"command": "rm -rf /tmp/outside"}
+}

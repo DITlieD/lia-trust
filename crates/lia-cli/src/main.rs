@@ -1292,6 +1292,7 @@ fn run_mcp(
             registry: Default::default(),
             env: Default::default(),
             run_id: None,
+            cleanup_policy: None,
         },
     };
     let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);

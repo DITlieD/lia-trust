@@ -1,0 +1,6 @@
+{
+  "gate_id": "shell-irreversible",
+  "verdict": "allow",
+  "reason_code": "SHELL_CLEANUP_APPROVED",
+  "exit_code": 0
+}

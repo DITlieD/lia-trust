@@ -121,6 +121,7 @@ mod tests {
             registry: BTreeMap::new(),
             env: BTreeMap::new(),
             run_id: None,
+            cleanup_policy: None,
         }
     }
 

@@ -57,7 +57,7 @@ failing tests/fixtures, then implementation, then an auditor verdict, then a han
 - Next action: begin M1 with RED fixtures before production implementation
 - Milestone commit: `dcdf2528877db530484d6f83abe95bf0806ac5cc`
 
-### Direct answer: context-dependent destructive commands
+### Direct answer at the M0 starting HEAD: context-dependent destructive commands
 
 The live implementation does **not** currently support context-dependent recursive deletion.
 `crates/lia-gates/src/shell.rs::check_shell_irreversible` calls `is_destructive` before filesystem
@@ -108,7 +108,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P1-14 | completion admission | `CompleteTask` dispatch exists in Codex proxy; not every harness exposes completion | PARTIAL | real supported completion entrypoint denies missing evidence; capability cells honest | M2 |
 | P1-20 | utility token tax bound | TB2 subset meets bound; Claw full rerun deferred | PARTIAL | local regression proof; external/full rerun precisely labeled | M3/M6 |
 | P1-21 | Claw contingency | `claw-utility-contingency.md` | SHIPPED | claims lint and document consistency | M6 |
-| P1-22 | policy-approved in-root `rm -rf` | documentation only; all recursive force deletes currently deny | DOC-ONLY | explicit target policy, adversarial properties, CLI receipt, offline verify | M1 |
+| P1-22 | policy-approved in-root `rm -rf` | V2 `cleanup_policy` exact-target gate, compiled CLI test, signed journal and offline verifier | SHIPPED | 4/4 cleanup CLI tests, 17/17 shell fixtures, hard-denial regression matrix | M1 complete; M6 reproof |
 | P2-1 | bounded external/process timeouts | some scripts/timeouts exist; Terminus gate spawn has no timeout | PARTIAL | explicit timeout/cancellation result and fail-closed fixture | M3 |
 | P2-2 | denial telemetry | reason histograms in collector/output | SHIPPED | stable structured counter fixture | M3 |
 | P2-3 | lower gate-process overhead | in-memory decision memo only; no service/daemon | PARTIAL | measured cached path plus correctness and lifecycle proof | M3 |
@@ -135,7 +135,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 | Source | Promise | Current evidence | Status | Exact acceptance evidence | Target |
 |---|---|---|---|---|---|
-| `docs/shell-rm-policy.md` | explicit policy-approved in-root cleanup | future-design prose only | DOC-ONLY | M1 policy/fixtures/CLI/journal/offline verification | M1 |
+| `docs/shell-rm-policy.md` | explicit policy-approved in-root cleanup | V2 schema and deterministic gate are live with receipt-backed CLI coverage | SHIPPED | M1 independent PASS; final-head replay in M6 | M1 complete; M6 reproof |
 | roadmap P3-1 | second utility model lane | lane machinery exists, execution deferred | PARTIAL | validate local configuration; record external model/service/cost execution gate | M6 |
 | roadmap P3-4 | network/egress CONFINE | capability key false, no backend | MISSING | local Linux network namespace/deny proof where supported | M5 |
 | roadmap P3-5 | Gemini CLI adapter | no module/contract/conformance case | MISSING | real supported hook/proxy entrypoint plus signed deny | M4 |
@@ -207,8 +207,38 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M1 — context-dependent recursive cleanup
 
-- State: pending
+- State: `MILESTONE_AUDITING` (independent PASS; commit pending)
+- Timestamp: `2026-07-22T04:01:49+09:00`
+- Starting HEAD: `40fdaf4eb60f2279a0e87f1c2075b861ed1b0429`
 - Requirements: P1-22 and shell/path portions of P0-4/P0-5/P1-1/P1-5
+- Completed behavior under audit: versioned `cleanup_policy` in gate config; exact normalized target
+  matching; stable approved/approval-required/out-of-scope/protected/ambiguous reasons; hard root,
+  home-wide, allowed-root, substitution, compound/nested shell, glob, unknown-env and symlink defenses.
+- Architectural decision: preserve `SHELL_DESTRUCTIVE` for true irreversible targets and existing
+  destructive classes; only a single top-level `rm` with recursive+force flags can enter the explicit
+  cleanup policy path. Policy targets must be absolute and match all normalized requested targets.
+- RED evidence: independent auditor ran `cargo test -p lia-cli --test cleanup_policy_cli`; tests
+  compiled and executed, then failed 0/4 because `cleanup_policy` was unknown and legacy behavior
+  returned `SHELL_DESTRUCTIVE`. This was the expected RED boundary, not malformed test code.
+- Files changed: `crates/lia-gates/src/lib.rs`, `crates/lia-gates/src/shell.rs`, GateConfig literals in
+  adapters/bench/CLI tests, `crates/lia-cli/tests/cleanup_policy_cli.rs`, five cleanup fixture folders,
+  and this handoff.
+- GREEN evidence: independent auditor PASS, 157/157 checks across focused and workspace suites:
+  `cargo test -p lia-cli --test cleanup_policy_cli` 4/4; `cargo test -p lia-gates` 26/26;
+  shell fixture runner 17/17; `cargo test --workspace` 110/110; M1-only clippy PASS;
+  gate-freeze PASS; wire check PASS with two production references; targeted rustfmt and diff checks PASS.
+- Production review: no added direct unwrap/expect/panic/todo/unimplemented/unreachable/unsafe; every
+  ambiguous/error case denied or propagated; regex construction failure now classifies destructive.
+- Off-agent evidence: RED and final GREEN auditor verdicts are transcribed in this section; no durable
+  report file was emitted by the auditor.
+- Dependencies: none added.
+- Known limitation / assurance ceiling: this is deterministic pre-execution path validation at visible
+  hook/proxy boundaries, not atomic deletion or protection against same-UID TOCTOU replacement; overall
+  assurance remains `GATE`, never CONFINE.
+- Non-blocking warnings: `shell.rs` is 944 lines (extract cleanup module later); full-workspace clippy
+  has a pre-existing `needless_range_loop` in `tools/lia_wire_check/src/lib.rs:256`, assigned to M6.
+- Blocker: none.
+- Next action: commit M1, record its hash, then begin M2 RED fixtures.
 - Commit: pending
 
 ### M2 — production trust wiring
@@ -239,6 +269,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 - State: pending
 - Requirements: every ledger row reconciled; all local acceptance evidence current; external gates exact
+- Discovered baseline debt: repair `tools/lia_wire_check/src/lib.rs:256` so full-workspace clippy can
+  pass without an allow; re-evaluate extraction of the M1 cleanup classifier from `shell.rs`.
 - Commit: pending
 
 ## Commit recording convention

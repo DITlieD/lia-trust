@@ -1,0 +1,13 @@
+{
+  "allowed_roots": ["/work/repo"],
+  "home_dir": "/home/agent",
+  "cwd": "/work/repo",
+  "protected_paths": ["/work/repo/.lia"],
+  "registry": {},
+  "env": {"HOME": "/home/agent"},
+  "run_id": "11111111-1111-1111-1111-111111111111",
+  "cleanup_policy": {
+    "version": 1,
+    "approved_targets": ["/work/repo/target"]
+  }
+}
