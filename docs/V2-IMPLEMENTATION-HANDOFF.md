@@ -299,7 +299,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M3 — telemetry, recovery, performance, lifecycle
 
-- State: `IMPLEMENTED_AUDIT_PASS` (implementation commit pending)
+- State: `MILESTONE_COMMITTED`
 - Timestamp: `2026-07-22T06:30:38+09:00`
 - Starting HEAD: `3771ca7b82fd11560278d4e4586d45da0e50ff10`
 - Requirements: P0-2/3/7, P1-20 local portion, P2-1/2/3/4/5
@@ -363,9 +363,9 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
   ceiling only after returning all command results and identifying the claims-lint BLOCK; the
   independent `m1_auditor` then verified the fix with 4/4 audit tiers PASS.
 - Blocker: none.
-- Next action: commit M3, record its hash, then begin M4 RED contracts/adapter/public-verification
-  fixtures from current official interface evidence.
-- Commit: pending
+- Next action: begin M4 RED contracts/adapter/public-verification fixtures from current official
+  interface evidence.
+- Commit: `01b957b5a4672d885fa1a6a0431c1c2ec63729bb`
 
 ### M4 — process contracts and adapter/public-verification fast-follows
 
