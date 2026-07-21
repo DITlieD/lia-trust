@@ -436,7 +436,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M5 — confinement, egress, and credential/evidence isolation
 
-- State: `AUDITED_PENDING_COMMIT`
+- State: `MILESTONE_COMMITTED`
 - Requirements: P3-4/P3-10 and threat-model isolation promises
 - Official interface grounding: util-linux namespace and `--kill-child` lifecycle semantics from
   `https://man7.org/linux/man-pages/man1/unshare.1.html`; mount-namespace isolation from
@@ -498,8 +498,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 - Dependencies: direct `libc` mount/Landlock/capability primitives and a direct `zeroize` use for
   compiler-resistant secret-buffer disposal; both crates were already present in the lock graph.
 - Blocker: none for local M5 scope.
-- Next action: commit M5, record its implementation hash, then begin M6 proof/debt closure.
-- Commit: pending
+- Next action: begin M6 proof/debt closure from the recorded M5 implementation.
+- Commit: `5532c944880afeac3c5047430d7a10838bef37ce` (`feat: add attested Linux confinement`)
 
 ### M6 — proof and completion audit
 
