@@ -243,8 +243,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M2 — production trust wiring
 
-- State: `MILESTONE_AUDITING` (independent PASS; awaiting commit)
-- Timestamp: `2026-07-22T04:51:46+09:00`
+- State: `MILESTONE_COMMITTED`
+- Timestamp: `2026-07-22T04:55:05+09:00`
 - Starting HEAD: `fd664e1e34e9cf2821b1f08ee5d76ca7a5ded366`
 - Requirements: P0-6, P1-10/11/12/14, P2-17, persistent adapter evidence
 - RED evidence: independent auditor compiled and ran
@@ -295,7 +295,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 - Next action: commit M2, record its hash, then begin M3 with RED lifecycle/timeout/cache/telemetry
   fixtures. Rotation, cleanup and stale-resource recovery remain M3 work.
 - Blocker: none.
-- Commit: pending
+- Commit: `f054ddd6d4b4b2c255d8278243dd1ea02a5dc32e`
 
 ### M3 — telemetry, recovery, performance, lifecycle
 
