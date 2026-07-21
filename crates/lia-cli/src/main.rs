@@ -5,11 +5,14 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lia_adapters::{
-    assert_adapter, default_claude_home, default_codex_home, default_lia_home,
-    evaluate_generic_action, evaluate_named_gate, handle_jsonrpc, handle_pre_tool_stdin,
-    install as install_kernel, known_adapters, looks_like_live_user_home, report_for_adapter,
-    serve_mcp_stdio, status as install_status, uninstall as uninstall_kernel, wrap, DenialRecord,
-    GenericAction, InspectionContext, InstallRequest, RunContext, WrapOptions,
+    assert_adapter, collect_registry_evidence, default_claude_home, default_codex_home,
+    default_cursor_home, default_gemini_home, default_lia_home, evaluate_generic_action,
+    evaluate_named_gate, handle_cursor_mcp_stdin, handle_cursor_shell_stdin,
+    handle_gemini_before_tool_stdin, handle_jsonrpc, handle_pre_tool_stdin,
+    install as install_kernel, known_adapters, load_and_validate_process_contract,
+    looks_like_live_user_home, report_for_adapter, serve_mcp_stdio, status as install_status,
+    uninstall as uninstall_kernel, wrap, DenialRecord, GenericAction, InspectionContext,
+    InstallRequest, RegistryEcosystem, RegistryEvidenceOptions, RunContext, WrapOptions,
 };
 use lia_ast::{ast_report_to_outcome, scan_diff, scan_file, Language, ScanOptions, AST_GATE_ID};
 use lia_bench::{
@@ -32,9 +35,9 @@ use lia_protocol::{parse_event, Event, GateVerdictEvent, Verdict};
 use lia_syco::{detect, parse_exchange, syco_report_to_outcome, SYCO_GATE_ID};
 use lia_taint::{check_flows, parse_graph};
 use lia_verify::{
-    build_demo_bundle, build_gate_receipt_bundle, sign_verification_report, verify_bundle,
-    verify_report_signature, verify_run, write_verification_report, VerificationReport,
-    VerifyRunOptions,
+    build_demo_bundle, build_gate_receipt_bundle, sign_verification_report,
+    verify_blob_with_cosign, verify_bundle, verify_report_signature, verify_run,
+    write_verification_report, PublicVerificationOptions, VerificationReport, VerifyRunOptions,
 };
 use uuid::Uuid;
 
@@ -106,6 +109,59 @@ enum Commands {
         key_id: String,
         #[arg(long)]
         run_id: Option<Uuid>,
+    },
+    #[command(name = "process-contract-validate")]
+    ProcessContractValidate {
+        #[arg(long)]
+        contract: PathBuf,
+        #[arg(long)]
+        execution: PathBuf,
+        #[arg(long)]
+        journal: PathBuf,
+    },
+    #[command(name = "public-verify")]
+    PublicVerify {
+        #[arg(long)]
+        artifact: PathBuf,
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        certificate_identity: String,
+        #[arg(long)]
+        certificate_oidc_issuer: String,
+        #[arg(long, default_value = "cosign")]
+        cosign_bin: PathBuf,
+        #[arg(long)]
+        expected_cosign_sha256: String,
+        #[arg(long, default_value_t = 30)]
+        timeout_seconds: u64,
+    },
+    #[command(name = "registry-evidence")]
+    RegistryEvidence {
+        #[arg(long)]
+        ecosystem: String,
+        #[arg(long)]
+        package: String,
+        #[arg(long)]
+        version: Option<String>,
+        #[arg(long)]
+        cache_dir: PathBuf,
+        #[arg(long, default_value_t = false)]
+        offline: bool,
+        #[arg(long, default_value = "curl")]
+        http_client: PathBuf,
+        #[arg(long)]
+        expected_http_client_sha256: Option<String>,
+        #[arg(long, default_value_t = 10)]
+        timeout_seconds: u64,
+        #[arg(long)]
+        base_url: Option<String>,
+        #[arg(long)]
+        expected_response_sha256: Option<String>,
+        #[arg(long)]
+        expected_cache_manifest_sha256: Option<String>,
+        #[arg(long, default_value_t = 86_400)]
+        max_cache_age_seconds: u64,
     },
     Gate {
         #[arg(long)]
@@ -365,7 +421,7 @@ enum Commands {
         #[arg(long)]
         request: Option<String>,
     },
-    /// Install LIA Trust Kernel into Claude Code + Codex harness configs.
+    /// Install LIA Trust Kernel into Claude Code, Codex, Gemini CLI, and Cursor configs.
     ///
     /// One-command TCB wiring: PreToolUse hook (Claude Code) + MCP proxy (Codex).
     /// Default is safe for fixtures: refuse writing real ~/.claude / ~/.codex unless
@@ -379,6 +435,10 @@ enum Commands {
         claude_home: Option<PathBuf>,
         #[arg(long)]
         codex_home: Option<PathBuf>,
+        #[arg(long)]
+        gemini_home: Option<PathBuf>,
+        #[arg(long)]
+        cursor_home: Option<PathBuf>,
         #[arg(long, default_value_t = false)]
         dry_run: bool,
         /// Allow writing the real user ~/.claude and ~/.codex (creates backups via merge only).
@@ -399,6 +459,10 @@ enum Commands {
         claude_home: Option<PathBuf>,
         #[arg(long)]
         codex_home: Option<PathBuf>,
+        #[arg(long)]
+        gemini_home: Option<PathBuf>,
+        #[arg(long)]
+        cursor_home: Option<PathBuf>,
         #[arg(long, default_value_t = false)]
         json: bool,
     },
@@ -412,6 +476,10 @@ enum Commands {
         claude_home: Option<PathBuf>,
         #[arg(long)]
         codex_home: Option<PathBuf>,
+        #[arg(long)]
+        gemini_home: Option<PathBuf>,
+        #[arg(long)]
+        cursor_home: Option<PathBuf>,
         #[arg(long, default_value_t = false)]
         dry_run: bool,
         #[arg(long, default_value_t = false)]
@@ -518,6 +586,55 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(ExitCode::SUCCESS)
         }
+        Commands::ProcessContractValidate {
+            contract,
+            execution,
+            journal,
+        } => run_process_contract_validate(contract, execution, journal),
+        Commands::PublicVerify {
+            artifact,
+            bundle,
+            certificate_identity,
+            certificate_oidc_issuer,
+            cosign_bin,
+            expected_cosign_sha256,
+            timeout_seconds,
+        } => run_public_verify(
+            artifact,
+            bundle,
+            certificate_identity,
+            certificate_oidc_issuer,
+            cosign_bin,
+            expected_cosign_sha256,
+            timeout_seconds,
+        ),
+        Commands::RegistryEvidence {
+            ecosystem,
+            package,
+            version,
+            cache_dir,
+            offline,
+            http_client,
+            expected_http_client_sha256,
+            timeout_seconds,
+            base_url,
+            expected_response_sha256,
+            expected_cache_manifest_sha256,
+            max_cache_age_seconds,
+        } => run_registry_evidence(
+            ecosystem,
+            package,
+            version,
+            cache_dir,
+            offline,
+            http_client,
+            expected_http_client_sha256,
+            timeout_seconds,
+            base_url,
+            expected_response_sha256,
+            expected_cache_manifest_sha256,
+            max_cache_age_seconds,
+        ),
         Commands::Gate {
             rules,
             evidence,
@@ -833,6 +950,8 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             lia_bin,
             claude_home,
             codex_home,
+            gemini_home,
+            cursor_home,
             dry_run,
             apply_live,
             allowed_root,
@@ -842,6 +961,8 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             lia_bin,
             claude_home,
             codex_home,
+            gemini_home,
+            cursor_home,
             dry_run,
             apply_live,
             allowed_root,
@@ -852,13 +973,25 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             lia_bin,
             claude_home,
             codex_home,
+            gemini_home,
+            cursor_home,
             json,
-        } => run_install_status(lia_home, lia_bin, claude_home, codex_home, json),
+        } => run_install_status(
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            gemini_home,
+            cursor_home,
+            json,
+        ),
         Commands::Uninstall {
             lia_home,
             lia_bin,
             claude_home,
             codex_home,
+            gemini_home,
+            cursor_home,
             dry_run,
             apply_live,
             json,
@@ -867,6 +1000,8 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             lia_bin,
             claude_home,
             codex_home,
+            gemini_home,
+            cursor_home,
             dry_run,
             apply_live,
             json,
@@ -889,16 +1024,23 @@ fn build_install_request(
     lia_bin: Option<PathBuf>,
     claude_home: Option<PathBuf>,
     codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
     dry_run: bool,
     apply_live: bool,
     allowed_root: Vec<PathBuf>,
 ) -> Result<InstallRequest, Box<dyn std::error::Error>> {
     let claude_home = claude_home.unwrap_or_else(default_claude_home);
     let codex_home = codex_home.unwrap_or_else(default_codex_home);
-    if !dry_run && looks_like_live_user_home(&claude_home, &codex_home) && !apply_live {
+    let gemini_home = gemini_home.unwrap_or_else(default_gemini_home);
+    let cursor_home = cursor_home.unwrap_or_else(default_cursor_home);
+    if !dry_run
+        && looks_like_live_user_home(&claude_home, &codex_home, &gemini_home, &cursor_home)
+        && !apply_live
+    {
         return Err(
-            "refusing to modify live ~/.claude or ~/.codex without --apply-live \
-             (use fixture --claude-home/--codex-home for tests, or --dry-run)"
+            "refusing to modify live harness configs without --apply-live \
+             (use fixture home flags for tests, or --dry-run)"
                 .into(),
         );
     }
@@ -907,6 +1049,8 @@ fn build_install_request(
         lia_bin: resolve_lia_bin(lia_bin)?,
         claude_home,
         codex_home,
+        gemini_home,
+        cursor_home,
         dry_run,
         apply_live,
         allowed_roots: allowed_root,
@@ -925,8 +1069,12 @@ fn emit_install_report(
         println!("lia_home: {}", report.lia_home.display());
         println!("claude_settings: {}", report.claude_settings.display());
         println!("codex_config: {}", report.codex_config.display());
+        println!("gemini_settings: {}", report.gemini_settings.display());
+        println!("cursor_hooks: {}", report.cursor_hooks.display());
         println!("claude_hook_installed: {}", report.claude_hook_installed);
         println!("codex_mcp_installed: {}", report.codex_mcp_installed);
+        println!("gemini_hook_installed: {}", report.gemini_hook_installed);
+        println!("cursor_hooks_installed: {}", report.cursor_hooks_installed);
         println!("kernel: {}", report.kernel.name);
         println!("assurance: {}", report.kernel.assurance);
         println!("enforced_on:");
@@ -949,6 +1097,8 @@ fn run_install(
     lia_bin: Option<PathBuf>,
     claude_home: Option<PathBuf>,
     codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
     dry_run: bool,
     apply_live: bool,
     allowed_root: Vec<PathBuf>,
@@ -959,6 +1109,8 @@ fn run_install(
         lia_bin,
         claude_home,
         codex_home,
+        gemini_home,
+        cursor_home,
         dry_run,
         apply_live,
         allowed_root,
@@ -972,6 +1124,8 @@ fn run_install_status(
     lia_bin: Option<PathBuf>,
     claude_home: Option<PathBuf>,
     codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
     json: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let req = InstallRequest {
@@ -979,6 +1133,8 @@ fn run_install_status(
         lia_bin: resolve_lia_bin(lia_bin)?,
         claude_home: claude_home.unwrap_or_else(default_claude_home),
         codex_home: codex_home.unwrap_or_else(default_codex_home),
+        gemini_home: gemini_home.unwrap_or_else(default_gemini_home),
+        cursor_home: cursor_home.unwrap_or_else(default_cursor_home),
         dry_run: false,
         apply_live: false,
         allowed_roots: vec![],
@@ -992,6 +1148,8 @@ fn run_uninstall(
     lia_bin: Option<PathBuf>,
     claude_home: Option<PathBuf>,
     codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
     dry_run: bool,
     apply_live: bool,
     json: bool,
@@ -1001,6 +1159,8 @@ fn run_uninstall(
         lia_bin,
         claude_home,
         codex_home,
+        gemini_home,
+        cursor_home,
         dry_run,
         apply_live,
         vec![],
@@ -1308,9 +1468,12 @@ fn run_hook(
     key_id: String,
     run_id: Option<Uuid>,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    if adapter != "claude-code" {
+    if !matches!(
+        adapter.as_str(),
+        "claude-code" | "gemini-cli" | "cursor-shell" | "cursor-mcp"
+    ) {
         return Ok(hook_fail_closed(&format!(
-            "hook adapter {adapter} not supported; use claude-code"
+            "hook adapter {adapter} not supported"
         )));
     }
     // Every fallible step below fails CLOSED: a hook that cannot load its policy, read
@@ -1332,33 +1495,126 @@ fn run_hook(
     if let Err(e) = io::stdin().read_to_string(&mut raw) {
         return Ok(hook_fail_closed(&format!("stdin read failed: {e}")));
     }
-    let out = match handle_pre_tool_stdin(&raw, &ctx) {
+    let handled = match adapter.as_str() {
+        "claude-code" => handle_pre_tool_stdin(&raw, &ctx),
+        "gemini-cli" => handle_gemini_before_tool_stdin(&raw, &ctx),
+        "cursor-shell" => handle_cursor_shell_stdin(&raw, &ctx),
+        "cursor-mcp" => handle_cursor_mcp_stdin(&raw, &ctx),
+        _ => unreachable!("adapter checked above"),
+    };
+    let out = match handled {
         Ok(o) => o,
         Err(e) => return Ok(hook_fail_closed(&format!("gate error: {e}"))),
     };
     println!("{out}");
-    let perm = serde_json::from_str::<serde_json::Value>(&out)
-        .ok()
+    let parsed = serde_json::from_str::<serde_json::Value>(&out).ok();
+    let perm = parsed
         .as_ref()
-        .and_then(|d| d.pointer("/hookSpecificOutput/permissionDecision"))
-        .and_then(|v| v.as_str())
+        .and_then(|decision| {
+            decision
+                .pointer("/hookSpecificOutput/permissionDecision")
+                .or_else(|| decision.get("decision"))
+                .or_else(|| decision.get("permission"))
+        })
+        .and_then(serde_json::Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| "deny".to_string());
-    if perm == "allow" {
+    if perm == "allow" || perm == "ask" {
         Ok(ExitCode::SUCCESS)
     } else {
         // exit 2 blocks but discards stdout JSON; surface the reason on stderr so the
         // model sees why it was denied.
-        let reason = serde_json::from_str::<serde_json::Value>(&out)
-            .ok()
+        let reason = parsed
             .as_ref()
-            .and_then(|d| d.pointer("/hookSpecificOutput/permissionDecisionReason"))
-            .and_then(|v| v.as_str())
+            .and_then(|decision| {
+                decision
+                    .pointer("/hookSpecificOutput/permissionDecisionReason")
+                    .or_else(|| decision.get("reason"))
+                    .or_else(|| decision.get("agent_message"))
+            })
+            .and_then(serde_json::Value::as_str)
             .unwrap_or("lia denied")
             .to_string();
         eprintln!("[lia] denied: {reason}");
         Ok(ExitCode::from(2))
     }
+}
+
+fn run_process_contract_validate(
+    contract: PathBuf,
+    execution: PathBuf,
+    journal: PathBuf,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let report = load_and_validate_process_contract(contract, execution, journal)?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(if report.followed {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(2)
+    })
+}
+
+fn run_public_verify(
+    artifact: PathBuf,
+    bundle: PathBuf,
+    certificate_identity: String,
+    certificate_oidc_issuer: String,
+    cosign_bin: PathBuf,
+    expected_cosign_sha256: String,
+    timeout_seconds: u64,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let report = verify_blob_with_cosign(&PublicVerificationOptions {
+        artifact,
+        bundle,
+        certificate_identity,
+        certificate_oidc_issuer,
+        cosign_bin,
+        expected_cosign_sha256,
+        timeout_seconds,
+    })?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(if report.accepted {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(2)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_registry_evidence(
+    ecosystem: String,
+    package: String,
+    version: Option<String>,
+    cache_dir: PathBuf,
+    offline: bool,
+    http_client: PathBuf,
+    expected_http_client_sha256: Option<String>,
+    timeout_seconds: u64,
+    base_url: Option<String>,
+    expected_response_sha256: Option<String>,
+    expected_cache_manifest_sha256: Option<String>,
+    max_cache_age_seconds: u64,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let report = collect_registry_evidence(&RegistryEvidenceOptions {
+        ecosystem: RegistryEcosystem::parse(&ecosystem)?,
+        package,
+        version,
+        cache_dir,
+        offline,
+        http_client,
+        expected_http_client_sha256,
+        timeout_seconds,
+        base_url,
+        expected_response_sha256,
+        expected_cache_manifest_sha256,
+        max_cache_age_seconds,
+    })?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(if report.accepted {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(2)
+    })
 }
 
 fn run_mcp(

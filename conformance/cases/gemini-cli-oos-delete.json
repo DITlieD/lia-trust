@@ -1,0 +1,19 @@
+{
+  "id": "gemini-cli-oos-delete",
+  "adapter": "gemini-cli",
+  "kind": "hook",
+  "input": {
+    "session_id": "conformance",
+    "transcript_path": "/tmp/gemini-transcript.json",
+    "hook_event_name": "BeforeTool",
+    "timestamp": "2026-07-22T00:00:00Z",
+    "tool_name": "run_shell_command",
+    "tool_input": {
+      "command": "rm -rf /tmp/outside-lia-conformance"
+    }
+  },
+  "expect": {
+    "permission_decision": "deny",
+    "any_verdict": "deny"
+  }
+}

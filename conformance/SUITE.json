@@ -9,6 +9,9 @@
     "cases/codex-oos-delete.json",
     "cases/generic-fabricated-pass.json",
     "cases/generic-oos-delete.json",
+    "cases/gemini-cli-oos-delete.json",
+    "cases/cursor-oos-delete.json",
+    "cases/mcp-inspection-read-only.json",
     "cases/assurance-rollup.json"
   ]
 }

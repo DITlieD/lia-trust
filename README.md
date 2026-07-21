@@ -26,13 +26,13 @@ That script will:
 
 1. Build `lia` (or reuse `target/release/lia` if present)
 2. Install the binary to `~/.local/bin/lia`
-3. Wire **Claude Code** + **Codex** with `lia install --apply-live`
+3. Wire **Claude Code**, **Codex**, **Gemini CLI**, and **Cursor** with `lia install --apply-live`
 
 ### Installer knobs (env)
 
 | Env | Effect |
 |-----|--------|
-| `LIA_NO_WIRE=1` | Binary only — do not touch `~/.claude` / `~/.codex` |
+| `LIA_NO_WIRE=1` | Binary only — do not touch harness configuration |
 | `LIA_DRY_RUN=1` | Plan harness merge only |
 | `LIA_PREFIX=~/.local` | Install prefix (`bin/lia`) |
 | `LIA_FORCE_BUILD=1` | Always rebuild |
@@ -53,6 +53,8 @@ LIA_DRY_RUN=1 bash install.sh
 lia status
 # claude_hook_installed: true
 # codex_mcp_installed: true
+# gemini_hook_installed: true
+# cursor_hooks_installed: true
 # assurance: GATE … never CONFINE
 
 lia journal-verify ~/.lia-trust/journal/default.db
@@ -75,11 +77,26 @@ What install does:
 |--------|--------|
 | Claude Code | `~/.claude/settings.json` → PreToolUse hook → `lia hook` |
 | Codex | `~/.codex/config.toml` → `[mcp_servers.lia-trust]` → `lia mcp` |
+| Gemini CLI | `~/.gemini/settings.json` → BeforeTool hook → `lia hook` |
+| Cursor | `~/.cursor/hooks.json` → fail-closed shell/MCP hooks → `lia hook` |
 | State | `~/.lia-trust/` keys, journal, policy, wrappers |
 
 Enforced only where hooks/MCP fire (**GATE**). Not complete mediation; not CONFINE.
 
 See `docs/CONTRACTS.md`, `docs/harness-compatibility.md`, `docs/threat-model.md`.
+
+### Process and external-evidence verification
+
+`lia process-contract-validate` checks a versioned task contract against a pre-action contract
+receipt and a signed terminal manifest. Evidence kinds and digests, allowed actions, assumption
+support, unresolved claims, and honest-stop unblock data are all contract-scoped. The Kernel
+validates a supplied process contract; it does not plan or repair the task.
+
+`lia public-verify` delegates to a **digest-pinned** `cosign verify-blob` and records the artifact,
+bundle, and verifier hashes. `lia registry-evidence` accepts live results only from the fixed
+official crates.io/npm HTTPS origins through a digest-pinned client. Offline registry replay needs
+external pins for both the response and cache metadata and enforces a maximum cache age. See
+`docs/CONTRACTS.md` for the exact flags and residual same-UID/TOCTOU limits.
 
 ### Bounded execution and journal lifecycle
 
@@ -130,6 +147,8 @@ or `[EXTERNAL]` tag and pass `lia claims-lint`.
 | Generic live tool-loop | Full gate set + ground + syco | MEASURED (separate from Harbor utility) |
 | Claude Code adapter path | PREVENT OFF/ON on frozen corpus via real hook | MEASURED recorded-adapter (see claims); live separate |
 | Codex adapter path | PREVENT OFF/ON on frozen corpus via real MCP | MEASURED recorded-adapter (see claims); live separate |
+| Gemini/Cursor adapter paths | Native payload/config conformance + signed deny through installed wrappers | MEASURED local fixtures only; live harness agents unmeasured |
+| Process/public/registry M4 | Contract/manifest negatives, pinned-helper delegation, cache/timeout controls | MEASURED local fixtures only; no public-log or live-registry claim |
 | TerminusLia TB2/Claw | Shell-irreversible only (livability companion) | MEASURED companion — **not** full trust stack |
 | Recorded cassette | Offline when live unreachable | MEASURED, never pooled with live |
 
@@ -137,7 +156,8 @@ or `[EXTERNAL]` tag and pass `lia claims-lint`.
 
 Adapter capability cells live in `bench/assurance_truth.json` and must be
 probe-derived where possible (`bench/probe_assurance.sh`). Generic wrap is not
-CONFINE in v1. Claude Code / Codex install surface is **GATE**. TerminusLia is
+CONFINE in v1. Claude Code, Codex, Gemini CLI, and Cursor install surfaces are **GATE** only for
+their mapped tool paths. TerminusLia is
 GATE for shell only; ground/syco/ast are CANNOT-OBSERVE on that path.
 
 ## Useful without commercial harness

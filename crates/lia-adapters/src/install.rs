@@ -1,9 +1,8 @@
-//! One-command LIA Trust Kernel install for Claude Code and Codex.
+//! One-command LIA Trust Kernel install for Claude Code, Codex, Gemini CLI, and Cursor.
 //!
 //! Pure config-merge logic is separated from process I/O so unit tests cover
 //! idempotent merge / uninstall without live agents. Default proof path uses
-//! fixture config dirs (`--claude-home` / `--codex-home`); live `~/.claude` /
-//! `~/.codex` require explicit `--apply-live` (or non-fixture home paths).
+//! fixture config dirs; live user harness homes require explicit `--apply-live`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,6 +17,7 @@ pub const LIA_HOOK_MARKER: &str = "lia-trust-kernel";
 pub const CODEX_MCP_SERVER: &str = "lia-trust";
 /// Claude PreToolUse matcher covering gated tools.
 pub const CLAUDE_PRETOOL_MATCHER: &str = "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit";
+pub const GEMINI_BEFORETOOL_MATCHER: &str = "^(run_shell_command|write_file|replace|read_file)$";
 /// Install manifest filename under lia home.
 pub const MANIFEST_NAME: &str = "install-manifest.json";
 
@@ -41,8 +41,13 @@ pub struct InstallPaths {
     pub probe_json: PathBuf,
     pub claude_wrapper: PathBuf,
     pub codex_wrapper: PathBuf,
+    pub gemini_wrapper: PathBuf,
+    pub cursor_shell_wrapper: PathBuf,
+    pub cursor_mcp_wrapper: PathBuf,
     pub claude_settings: PathBuf,
     pub codex_config: PathBuf,
+    pub gemini_settings: PathBuf,
+    pub cursor_hooks: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,8 +57,12 @@ pub struct InstallReport {
     pub lia_home: PathBuf,
     pub claude_settings: PathBuf,
     pub codex_config: PathBuf,
+    pub gemini_settings: PathBuf,
+    pub cursor_hooks: PathBuf,
     pub claude_hook_installed: bool,
     pub codex_mcp_installed: bool,
+    pub gemini_hook_installed: bool,
+    pub cursor_hooks_installed: bool,
     pub kernel: KernelBoundary,
     pub notes: Vec<String>,
 }
@@ -82,6 +91,8 @@ impl Default for KernelBoundary {
             enforced_on: vec![
                 "configured surface: Claude Code PreToolUse hook (unprobed at install)".into(),
                 "configured surface: Codex MCP/tool proxy (unprobed at install)".into(),
+                "configured surface: Gemini CLI BeforeTool hook (unprobed at install)".into(),
+                "configured surface: Cursor shell/MCP hooks (unprobed at install)".into(),
             ],
             cannot_observe: vec![
                 "process/network CONFINE (v1 forbids CONFINE claim)".into(),
@@ -99,6 +110,8 @@ pub struct InstallRequest {
     pub lia_bin: PathBuf,
     pub claude_home: PathBuf,
     pub codex_home: PathBuf,
+    pub gemini_home: PathBuf,
+    pub cursor_home: PathBuf,
     pub dry_run: bool,
     /// When false, refuse to write if paths look like the real user home configs
     /// without an explicit apply-live flag (caller enforces).
@@ -107,7 +120,14 @@ pub struct InstallRequest {
 }
 
 impl InstallPaths {
-    pub fn resolve(lia_home: &Path, lia_bin: &Path, claude_home: &Path, codex_home: &Path) -> Self {
+    pub fn resolve(
+        lia_home: &Path,
+        lia_bin: &Path,
+        claude_home: &Path,
+        codex_home: &Path,
+        gemini_home: &Path,
+        cursor_home: &Path,
+    ) -> Self {
         Self {
             lia_home: lia_home.to_path_buf(),
             lia_bin: lia_bin.to_path_buf(),
@@ -117,8 +137,13 @@ impl InstallPaths {
             probe_json: lia_home.join("probe.json"),
             claude_wrapper: lia_home.join("bin").join("claude-pretool.sh"),
             codex_wrapper: lia_home.join("bin").join("codex-mcp.sh"),
+            gemini_wrapper: lia_home.join("bin").join("gemini-beforetool.sh"),
+            cursor_shell_wrapper: lia_home.join("bin").join("cursor-before-shell.sh"),
+            cursor_mcp_wrapper: lia_home.join("bin").join("cursor-before-mcp.sh"),
             claude_settings: claude_home.join("settings.json"),
             codex_config: codex_home.join("config.toml"),
+            gemini_settings: gemini_home.join("settings.json"),
+            cursor_hooks: cursor_home.join("hooks.json"),
         }
     }
 }
@@ -145,6 +170,20 @@ pub fn default_codex_home() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| dirs_home().map(|h| h.join(".codex")))
         .unwrap_or_else(|| PathBuf::from(".codex"))
+}
+
+pub fn default_gemini_home() -> PathBuf {
+    std::env::var_os("GEMINI_CLI_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs_home().map(|home| home.join(".gemini")))
+        .unwrap_or_else(|| PathBuf::from(".gemini"))
+}
+
+pub fn default_cursor_home() -> PathBuf {
+    std::env::var_os("CURSOR_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs_home().map(|home| home.join(".cursor")))
+        .unwrap_or_else(|| PathBuf::from(".cursor"))
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -224,6 +263,159 @@ pub fn claude_hook_present(settings: &Value) -> bool {
         .and_then(|v| v.as_array())
         .map(|a| a.iter().any(entry_is_lia_hook))
         .unwrap_or(false)
+}
+
+pub fn merge_gemini_settings(existing: &Value, wrapper_cmd: &str) -> Result<Value, InstallError> {
+    let mut root = json_object(existing, "gemini settings")?;
+    let hooks = root
+        .as_object_mut()
+        .ok_or_else(|| InstallError::Invalid("gemini settings not object".into()))?
+        .entry("hooks")
+        .or_insert_with(|| json!({}));
+    let before = hooks
+        .as_object_mut()
+        .ok_or_else(|| InstallError::Invalid("Gemini hooks must be object".into()))?
+        .entry("BeforeTool")
+        .or_insert_with(|| json!([]));
+    let entries = before
+        .as_array_mut()
+        .ok_or_else(|| InstallError::Invalid("Gemini BeforeTool must be array".into()))?;
+    entries.retain(|entry| !gemini_entry_is_lia(entry));
+    entries.push(json!({
+        "matcher": GEMINI_BEFORETOOL_MATCHER,
+        "sequential": true,
+        "hooks": [{
+            "type": "command",
+            "command": wrapper_cmd,
+            "name": "LIA Trust Kernel",
+            "timeout": 30000,
+            "description": "Fail-closed pre-action safety gate"
+        }]
+    }));
+    Ok(root)
+}
+
+pub fn unmerge_gemini_settings(existing: &Value) -> Result<Value, InstallError> {
+    let mut root = json_object(existing, "gemini settings")?;
+    if let Some(hooks) = root.get_mut("hooks").and_then(Value::as_object_mut) {
+        if let Some(entries) = hooks.get_mut("BeforeTool").and_then(Value::as_array_mut) {
+            entries.retain(|entry| !gemini_entry_is_lia(entry));
+            if entries.is_empty() {
+                hooks.remove("BeforeTool");
+            }
+        }
+        if hooks.is_empty() {
+            root.as_object_mut().map(|object| object.remove("hooks"));
+        }
+    }
+    Ok(root)
+}
+
+pub fn gemini_hook_present(settings: &Value) -> bool {
+    settings
+        .pointer("/hooks/BeforeTool")
+        .and_then(Value::as_array)
+        .is_some_and(|entries| entries.iter().any(gemini_entry_is_lia))
+}
+
+fn gemini_entry_is_lia(entry: &Value) -> bool {
+    entry
+        .get("hooks")
+        .and_then(Value::as_array)
+        .is_some_and(|hooks| {
+            hooks.iter().any(|hook| {
+                hook.get("command")
+                    .and_then(Value::as_str)
+                    .is_some_and(|command| command.contains("gemini-beforetool"))
+            })
+        })
+}
+
+pub fn merge_cursor_hooks(
+    existing: &Value,
+    shell_wrapper: &str,
+    mcp_wrapper: &str,
+) -> Result<Value, InstallError> {
+    let mut root = json_object(existing, "cursor hooks")?;
+    root.as_object_mut()
+        .ok_or_else(|| InstallError::Invalid("cursor hooks not object".into()))?
+        .insert("version".into(), json!(1));
+    let hooks = root
+        .as_object_mut()
+        .ok_or_else(|| InstallError::Invalid("cursor hooks not object".into()))?
+        .entry("hooks")
+        .or_insert_with(|| json!({}));
+    let hooks = hooks
+        .as_object_mut()
+        .ok_or_else(|| InstallError::Invalid("Cursor hooks must be object".into()))?;
+    merge_cursor_hook_array(hooks, "beforeShellExecution", shell_wrapper)?;
+    merge_cursor_hook_array(hooks, "beforeMCPExecution", mcp_wrapper)?;
+    Ok(root)
+}
+
+pub fn unmerge_cursor_hooks(existing: &Value) -> Result<Value, InstallError> {
+    let mut root = json_object(existing, "cursor hooks")?;
+    if let Some(hooks) = root.get_mut("hooks").and_then(Value::as_object_mut) {
+        for event in ["beforeShellExecution", "beforeMCPExecution"] {
+            if let Some(entries) = hooks.get_mut(event).and_then(Value::as_array_mut) {
+                entries.retain(|entry| !cursor_entry_is_lia(entry));
+                if entries.is_empty() {
+                    hooks.remove(event);
+                }
+            }
+        }
+        if hooks.is_empty() {
+            root.as_object_mut().map(|object| object.remove("hooks"));
+        }
+    }
+    Ok(root)
+}
+
+pub fn cursor_hooks_present(hooks: &Value) -> bool {
+    ["beforeShellExecution", "beforeMCPExecution"]
+        .iter()
+        .all(|event| {
+            hooks
+                .pointer(&format!("/hooks/{event}"))
+                .and_then(Value::as_array)
+                .is_some_and(|entries| entries.iter().any(cursor_entry_is_lia))
+        })
+}
+
+fn merge_cursor_hook_array(
+    hooks: &mut serde_json::Map<String, Value>,
+    event: &str,
+    wrapper: &str,
+) -> Result<(), InstallError> {
+    let entries = hooks.entry(event).or_insert_with(|| json!([]));
+    let entries = entries
+        .as_array_mut()
+        .ok_or_else(|| InstallError::Invalid(format!("Cursor {event} must be array")))?;
+    entries.retain(|entry| !cursor_entry_is_lia(entry));
+    entries.push(json!({
+        "command": wrapper,
+        "timeout": 30,
+        "failClosed": true
+    }));
+    Ok(())
+}
+
+fn cursor_entry_is_lia(entry: &Value) -> bool {
+    entry
+        .get("command")
+        .and_then(Value::as_str)
+        .is_some_and(|command| command.contains("cursor-before-"))
+}
+
+fn json_object(existing: &Value, label: &str) -> Result<Value, InstallError> {
+    match existing {
+        Value::Object(object) => Ok(Value::Object(object.clone())),
+        Value::Null => Ok(json!({})),
+        other => Err(InstallError::Invalid(format!(
+            "{label} must be a JSON object, got {}",
+            type_name(other)
+        ))),
+    }
 }
 
 fn entry_is_lia_hook(entry: &Value) -> bool {
@@ -387,6 +579,38 @@ exec "{bin}" mcp \
     )
 }
 
+pub fn gemini_wrapper_script(paths: &InstallPaths) -> String {
+    hook_wrapper_script(paths, "gemini-cli")
+}
+
+pub fn cursor_shell_wrapper_script(paths: &InstallPaths) -> String {
+    hook_wrapper_script(paths, "cursor-shell")
+}
+
+pub fn cursor_mcp_wrapper_script(paths: &InstallPaths) -> String {
+    hook_wrapper_script(paths, "cursor-mcp")
+}
+
+fn hook_wrapper_script(paths: &InstallPaths, adapter: &str) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+# {marker}
+set -euo pipefail
+SECRET="$(tr -d '[:space:]' < "{secret}")"
+exec "{bin}" hook --adapter {adapter} \
+  --config "{config}" \
+  --journal "{journal}" \
+  --secret-key-hex "$SECRET" \
+  --key-id lia-install
+"#,
+        marker = LIA_HOOK_MARKER,
+        secret = paths.secret_key_file.display(),
+        bin = paths.lia_bin.display(),
+        config = paths.config_json.display(),
+        journal = paths.journal_db.display(),
+    )
+}
+
 pub fn default_gate_config_json(allowed_roots: &[PathBuf], cwd: &Path) -> Value {
     let roots: Vec<String> = if allowed_roots.is_empty() {
         vec![cwd.display().to_string()]
@@ -510,6 +734,8 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &req.lia_bin,
         &req.claude_home,
         &req.codex_home,
+        &req.gemini_home,
+        &req.cursor_home,
     );
     let mut notes = vec![
         "Kernel = protocol + journal + Ed25519 + seven gates + offline verify + thin adapters"
@@ -549,6 +775,17 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &paths.codex_wrapper.display().to_string(),
         &[],
     );
+    let gemini_existing = read_json_or_empty(&paths.gemini_settings)?;
+    let gemini_merged = merge_gemini_settings(
+        &gemini_existing,
+        &paths.gemini_wrapper.display().to_string(),
+    )?;
+    let cursor_existing = read_json_or_empty(&paths.cursor_hooks)?;
+    let cursor_merged = merge_cursor_hooks(
+        &cursor_existing,
+        &paths.cursor_shell_wrapper.display().to_string(),
+        &paths.cursor_mcp_wrapper.display().to_string(),
+    )?;
 
     if req.dry_run {
         notes.push("dry-run: no files written".into());
@@ -558,8 +795,12 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             lia_home: paths.lia_home,
             claude_settings: paths.claude_settings,
             codex_config: paths.codex_config,
+            gemini_settings: paths.gemini_settings,
+            cursor_hooks: paths.cursor_hooks,
             claude_hook_installed: claude_hook_present(&claude_merged),
             codex_mcp_installed: codex_mcp_present(&codex_merged),
+            gemini_hook_installed: gemini_hook_present(&gemini_merged),
+            cursor_hooks_installed: cursor_hooks_present(&cursor_merged),
             kernel: KernelBoundary::default(),
             notes,
         });
@@ -575,6 +816,12 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
     if let Some(parent) = paths.codex_config.parent() {
         fs::create_dir_all(parent)?;
     }
+    if let Some(parent) = paths.gemini_settings.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if let Some(parent) = paths.cursor_hooks.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
     write_secret(&paths.secret_key_file, &secret)?;
     write_pretty_json(&paths.config_json, &config)?;
@@ -584,12 +831,31 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &paths.lia_home.join("probe-codex.json"),
         &default_probe_json("codex"),
     )?;
+    write_pretty_json(
+        &paths.lia_home.join("probe-gemini-cli.json"),
+        &default_probe_json("gemini-cli"),
+    )?;
+    write_pretty_json(
+        &paths.lia_home.join("probe-cursor.json"),
+        &default_probe_json("cursor"),
+    )?;
 
     write_script(&paths.claude_wrapper, &claude_wrapper_script(&paths))?;
     write_script(&paths.codex_wrapper, &codex_wrapper_script(&paths))?;
+    write_script(&paths.gemini_wrapper, &gemini_wrapper_script(&paths))?;
+    write_script(
+        &paths.cursor_shell_wrapper,
+        &cursor_shell_wrapper_script(&paths),
+    )?;
+    write_script(
+        &paths.cursor_mcp_wrapper,
+        &cursor_mcp_wrapper_script(&paths),
+    )?;
 
     write_pretty_json(&paths.claude_settings, &claude_merged)?;
     fs::write(&paths.codex_config, &codex_merged)?;
+    write_pretty_json(&paths.gemini_settings, &gemini_merged)?;
+    write_pretty_json(&paths.cursor_hooks, &cursor_merged)?;
 
     let manifest = json!({
         "version": 1,
@@ -602,6 +868,8 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
 
     notes.push(format!("wrote {}", paths.claude_settings.display()));
     notes.push(format!("wrote {}", paths.codex_config.display()));
+    notes.push(format!("wrote {}", paths.gemini_settings.display()));
+    notes.push(format!("wrote {}", paths.cursor_hooks.display()));
     notes.push(format!("state under {}", paths.lia_home.display()));
 
     Ok(InstallReport {
@@ -610,8 +878,12 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         lia_home: paths.lia_home.clone(),
         claude_settings: paths.claude_settings.clone(),
         codex_config: paths.codex_config.clone(),
+        gemini_settings: paths.gemini_settings.clone(),
+        cursor_hooks: paths.cursor_hooks.clone(),
         claude_hook_installed: claude_hook_present(&claude_merged),
         codex_mcp_installed: codex_mcp_present(&codex_merged),
+        gemini_hook_installed: gemini_hook_present(&gemini_merged),
+        cursor_hooks_installed: cursor_hooks_present(&cursor_merged),
         kernel: KernelBoundary::default(),
         notes,
     })
@@ -623,6 +895,8 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &req.lia_bin,
         &req.claude_home,
         &req.codex_home,
+        &req.gemini_home,
+        &req.cursor_home,
     );
     let mut notes = Vec::new();
 
@@ -630,6 +904,10 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
     let claude_new = unmerge_claude_settings(&claude_existing)?;
     let codex_existing = read_text_or_empty(&paths.codex_config)?;
     let codex_new = unmerge_codex_toml(&codex_existing);
+    let gemini_existing = read_json_or_empty(&paths.gemini_settings)?;
+    let gemini_new = unmerge_gemini_settings(&gemini_existing)?;
+    let cursor_existing = read_json_or_empty(&paths.cursor_hooks)?;
+    let cursor_new = unmerge_cursor_hooks(&cursor_existing)?;
 
     if req.dry_run {
         notes.push("dry-run: no files written".into());
@@ -639,8 +917,12 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             lia_home: paths.lia_home,
             claude_settings: paths.claude_settings,
             codex_config: paths.codex_config,
+            gemini_settings: paths.gemini_settings,
+            cursor_hooks: paths.cursor_hooks,
             claude_hook_installed: claude_hook_present(&claude_new),
             codex_mcp_installed: codex_mcp_present(&codex_new),
+            gemini_hook_installed: gemini_hook_present(&gemini_new),
+            cursor_hooks_installed: cursor_hooks_present(&cursor_new),
             kernel: KernelBoundary::default(),
             notes,
         });
@@ -666,6 +948,26 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             paths.codex_config.display()
         ));
     }
+    if paths.gemini_settings.exists() || gemini_hook_present(&gemini_existing) {
+        if let Some(parent) = paths.gemini_settings.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        write_pretty_json(&paths.gemini_settings, &gemini_new)?;
+        notes.push(format!(
+            "removed LIA hooks from {}",
+            paths.gemini_settings.display()
+        ));
+    }
+    if paths.cursor_hooks.exists() || cursor_hooks_present(&cursor_existing) {
+        if let Some(parent) = paths.cursor_hooks.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        write_pretty_json(&paths.cursor_hooks, &cursor_new)?;
+        notes.push(format!(
+            "removed LIA hooks from {}",
+            paths.cursor_hooks.display()
+        ));
+    }
     // Keep keys/journal by default (audit trail); only remove wrappers marker note.
     notes.push("LIA state dir retained (journal/keys); delete lia-home manually if desired".into());
 
@@ -675,8 +977,12 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         lia_home: paths.lia_home,
         claude_settings: paths.claude_settings,
         codex_config: paths.codex_config,
+        gemini_settings: paths.gemini_settings,
+        cursor_hooks: paths.cursor_hooks,
         claude_hook_installed: claude_hook_present(&claude_new),
         codex_mcp_installed: codex_mcp_present(&codex_new),
+        gemini_hook_installed: gemini_hook_present(&gemini_new),
+        cursor_hooks_installed: cursor_hooks_present(&cursor_new),
         kernel: KernelBoundary::default(),
         notes,
     })
@@ -688,9 +994,13 @@ pub fn status(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &req.lia_bin,
         &req.claude_home,
         &req.codex_home,
+        &req.gemini_home,
+        &req.cursor_home,
     );
     let claude = read_json_or_empty(&paths.claude_settings)?;
     let codex = read_text_or_empty(&paths.codex_config)?;
+    let gemini = read_json_or_empty(&paths.gemini_settings)?;
+    let cursor = read_json_or_empty(&paths.cursor_hooks)?;
     let mut notes = Vec::new();
     if paths.lia_home.join(MANIFEST_NAME).exists() {
         notes.push("install-manifest present".into());
@@ -709,8 +1019,12 @@ pub fn status(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         lia_home: paths.lia_home,
         claude_settings: paths.claude_settings,
         codex_config: paths.codex_config,
+        gemini_settings: paths.gemini_settings,
+        cursor_hooks: paths.cursor_hooks,
         claude_hook_installed: claude_hook_present(&claude),
         codex_mcp_installed: codex_mcp_present(&codex),
+        gemini_hook_installed: gemini_hook_present(&gemini),
+        cursor_hooks_installed: cursor_hooks_present(&cursor),
         kernel: KernelBoundary::default(),
         notes,
     })
@@ -790,11 +1104,19 @@ fn chrono_now() -> String {
 }
 
 /// Resolve which home configs look "live" (real user dirs).
-pub fn looks_like_live_user_home(claude_home: &Path, codex_home: &Path) -> bool {
+pub fn looks_like_live_user_home(
+    claude_home: &Path,
+    codex_home: &Path,
+    gemini_home: &Path,
+    cursor_home: &Path,
+) -> bool {
     let Some(home) = dirs_home() else {
         return false;
     };
-    claude_home == home.join(".claude") || codex_home == home.join(".codex")
+    claude_home == home.join(".claude")
+        || codex_home == home.join(".codex")
+        || gemini_home == home.join(".gemini")
+        || cursor_home == home.join(".cursor")
 }
 
 #[cfg(test)]
@@ -849,11 +1171,82 @@ command = "/bin/true"
     }
 
     #[test]
+    fn gemini_and_cursor_merges_are_idempotent_and_cursor_fails_closed() {
+        let gemini_base = json!({
+            "theme": "dark",
+            "hooks": {"BeforeTool": [{
+                "matcher": "other_tool",
+                "hooks": [{"type": "command", "command": "echo other"}]
+            }]}
+        });
+        let gemini = merge_gemini_settings(&gemini_base, "/tmp/gemini-beforetool.sh").unwrap();
+        let gemini_twice = merge_gemini_settings(&gemini, "/tmp/gemini-beforetool.sh").unwrap();
+        assert!(gemini_hook_present(&gemini_twice));
+        assert_eq!(
+            gemini_twice
+                .pointer("/hooks/BeforeTool")
+                .and_then(Value::as_array)
+                .unwrap()
+                .iter()
+                .filter(|entry| gemini_entry_is_lia(entry))
+                .count(),
+            1
+        );
+        assert!(!gemini_hook_present(
+            &unmerge_gemini_settings(&gemini_twice).unwrap()
+        ));
+
+        let cursor_base = json!({
+            "version": 1,
+            "hooks": {"beforeShellExecution": [{"command": "echo other"}]}
+        });
+        let cursor = merge_cursor_hooks(
+            &cursor_base,
+            "/tmp/cursor-before-shell.sh",
+            "/tmp/cursor-before-mcp.sh",
+        )
+        .unwrap();
+        let cursor_twice = merge_cursor_hooks(
+            &cursor,
+            "/tmp/cursor-before-shell.sh",
+            "/tmp/cursor-before-mcp.sh",
+        )
+        .unwrap();
+        assert!(cursor_hooks_present(&cursor_twice));
+        for event in ["beforeShellExecution", "beforeMCPExecution"] {
+            let entries = cursor_twice
+                .pointer(&format!("/hooks/{event}"))
+                .and_then(Value::as_array)
+                .unwrap();
+            let lia_entry = entries
+                .iter()
+                .find(|entry| cursor_entry_is_lia(entry))
+                .unwrap();
+            assert_eq!(
+                lia_entry.get("failClosed").and_then(Value::as_bool),
+                Some(true)
+            );
+            assert_eq!(
+                entries
+                    .iter()
+                    .filter(|entry| cursor_entry_is_lia(entry))
+                    .count(),
+                1
+            );
+        }
+        assert!(!cursor_hooks_present(
+            &unmerge_cursor_hooks(&cursor_twice).unwrap()
+        ));
+    }
+
+    #[test]
     fn install_status_uninstall_fixture_roundtrip() {
         let tmp = tempdir().unwrap();
         let lia_home = tmp.path().join("lia-home");
         let claude_home = tmp.path().join("claude");
         let codex_home = tmp.path().join("codex");
+        let gemini_home = tmp.path().join("gemini");
+        let cursor_home = tmp.path().join("cursor");
         // Fake binary path (must not collide with lia_home directory)
         let bin = tmp.path().join("lia-bin");
         fs::write(&bin, b"#!/bin/sh\n").unwrap();
@@ -868,6 +1261,8 @@ command = "/bin/true"
             lia_bin: bin.clone(),
             claude_home: claude_home.clone(),
             codex_home: codex_home.clone(),
+            gemini_home: gemini_home.clone(),
+            cursor_home: cursor_home.clone(),
             dry_run: false,
             apply_live: false,
             allowed_roots: vec![tmp.path().to_path_buf()],
@@ -878,6 +1273,8 @@ command = "/bin/true"
         assert!(lia_home.join(MANIFEST_NAME).exists());
         assert!(claude_home.join("settings.json").exists());
         assert!(codex_home.join("config.toml").exists());
+        assert!(gemini_home.join("settings.json").exists());
+        assert!(cursor_home.join("hooks.json").exists());
 
         let st = status(&req).unwrap();
         assert!(st.claude_hook_installed);
@@ -886,6 +1283,8 @@ command = "/bin/true"
         // idempotent reinstall
         let rep2 = install(&req).unwrap();
         assert!(rep2.claude_hook_installed);
+        assert!(rep2.gemini_hook_installed);
+        assert!(rep2.cursor_hooks_installed);
         let settings: Value =
             serde_json::from_str(&fs::read_to_string(claude_home.join("settings.json")).unwrap())
                 .unwrap();
@@ -899,9 +1298,13 @@ command = "/bin/true"
         let un = uninstall(&req).unwrap();
         assert!(!un.claude_hook_installed);
         assert!(!un.codex_mcp_installed);
+        assert!(!un.gemini_hook_installed);
+        assert!(!un.cursor_hooks_installed);
         let st2 = status(&req).unwrap();
         assert!(!st2.claude_hook_installed);
         assert!(!st2.codex_mcp_installed);
+        assert!(!st2.gemini_hook_installed);
+        assert!(!st2.cursor_hooks_installed);
     }
 
     #[test]
@@ -914,6 +1317,8 @@ command = "/bin/true"
             lia_bin: bin,
             claude_home: tmp.path().join("claude"),
             codex_home: tmp.path().join("codex"),
+            gemini_home: tmp.path().join("gemini"),
+            cursor_home: tmp.path().join("cursor"),
             dry_run: true,
             apply_live: false,
             allowed_roots: vec![],

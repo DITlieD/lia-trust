@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 pub const GATE_MANIFEST_VERSION: &str = "lia-gate-manifest-v1";
 pub const PROTOCOL_VERSION: &str = "lia-protocol-v1";
+pub const PROCESS_CONTRACT_VERSION: &str = "lia-process-contract-v1";
 
 #[derive(Debug, Error)]
 pub enum ProtocolError {
@@ -53,6 +54,7 @@ pub enum RiskTier {
 #[serde(tag = "family", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum Event {
+    ProcessContractDeclared(ProcessContractDeclared),
     ActionAttempted(ActionAttempted),
     ActionObserved(ActionObserved),
     GateVerdict(GateVerdictEvent),
@@ -60,6 +62,15 @@ pub enum Event {
     ClaimSubmitted(ClaimSubmitted),
     JournalMeta(JournalMeta),
     RawHarness(RawHarnessEvent),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessContractDeclared {
+    pub contract_id: Uuid,
+    pub contract_version: String,
+    pub contract_sha256: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -186,6 +197,127 @@ pub struct JournalRow {
     pub row_hash: String,
     pub prev_hash: String,
     pub receipt: Option<Receipt>,
+}
+
+/// A caller-supplied, model-neutral task contract. LIA validates this contract;
+/// planning, decomposition, recovery, and repair remain outside the trust kernel.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessContract {
+    pub contract_version: String,
+    pub contract_id: Uuid,
+    pub run_id: Uuid,
+    pub objective: String,
+    #[serde(default)]
+    pub assumptions: Vec<ProcessAssumption>,
+    #[serde(default)]
+    pub required_evidence: Vec<ProcessEvidenceRequirement>,
+    #[serde(default)]
+    pub allowed_actions: Vec<ActionKind>,
+    pub completion_predicate: ProcessCompletionPredicate,
+    #[serde(default)]
+    pub honest_stop_conditions: Vec<HonestStopCondition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessAssumption {
+    pub id: String,
+    pub statement: String,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessEvidenceRequirement {
+    pub id: String,
+    pub kind: String,
+    pub description: String,
+    #[serde(default)]
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessCompletionPredicate {
+    #[serde(default)]
+    pub all_evidence: Vec<String>,
+    #[serde(default)]
+    pub require_all_assumptions_supported: bool,
+    #[serde(default)]
+    pub require_no_unresolved_claims: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HonestStopCondition {
+    pub code: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessExecution {
+    pub contract_id: Uuid,
+    pub contract_receipt_id: Uuid,
+    #[serde(default)]
+    pub performed_actions: Vec<ProcessActionRef>,
+    #[serde(default)]
+    pub evidence: Vec<ProcessEvidenceRef>,
+    #[serde(default)]
+    pub supported_assumptions: Vec<String>,
+    #[serde(default)]
+    pub unresolved_claims: Vec<ProcessUnresolvedClaim>,
+    pub outcome: ProcessOutcome,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessActionRef {
+    pub action_id: Uuid,
+    pub kind: ActionKind,
+    pub receipt_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessEvidenceRef {
+    pub requirement_id: String,
+    pub evidence_id: Uuid,
+    pub receipt_id: Uuid,
+    pub kind: String,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessUnresolvedClaim {
+    pub claim_id: String,
+    pub statement: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum ProcessOutcome {
+    Complete {
+        receipt_id: Uuid,
+    },
+    HonestStop {
+        condition_code: String,
+        receipt_id: Uuid,
+        unblocks: Vec<TypedUnblockCondition>,
+    },
+    InProgress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TypedUnblockCondition {
+    pub tried: Vec<String>,
+    pub missing: String,
+    pub route: String,
 }
 
 pub fn parse_event(json: &str) -> Result<Event, ProtocolError> {

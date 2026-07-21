@@ -24,12 +24,15 @@ In scope for v1 Kernel:
 - Protocol events + seven gates (rules-as-data, fail-closed)
 - Append-only journal + blake3 chain + Ed25519 receipts
 - Offline `lia verify` / `journal-verify`
-- Thin adapters: Claude Code **PreToolUse** hook, Codex **MCP** proxy, generic wrap (honest partial mediation)
+- Typed process-contract validation with signed pre-action declaration and terminal execution manifest
+- Thin adapters: Claude Code **PreToolUse**, Codex **MCP**, Gemini CLI **BeforeTool**, Cursor
+  fail-closed shell/MCP hooks, and generic wrap (honest partial mediation)
+- Optional digest-pinned external cosign verification and official-origin dependency observations
 
 Out of scope (not Kernel / commercial LIA or POST-L6):
 
 - Planning, recovery, multi-agent orchestration, claim extraction
-- Process/network **CONFINE**, credential broker, live package registries
+- Process/network **CONFINE** and credential broker
 - Commercial Harness / Canvas product layers
 
 ## Attack → control map
@@ -38,11 +41,14 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
 |--------|---------|----------|
 | Fabricated test pass | test-integrity gate on hook/MCP/wrap path | Only when action hits adapter |
 | `rm -rf` / OOS delete | shell-irreversible + filesystem-scope | Denylist is best-effort (see below); nested shells / non-tool paths CANNOT-OBSERVE |
-| Hallucinated dependency | dependency-reality (fixture registry in v1) | Live registry fetch POST-L6 |
+| Hallucinated dependency | dependency-reality from policy snapshot or bounded official-registry evidence | HTTPS observation is not registry-signed transparency proof |
 | Unsupported agreement | lia-syco when invoked | Not on every Terminus path |
 | Journal rewrite (tamper) | blake3 chain recompute + Ed25519, offline verify | Verifier must be run off-agent |
 | Journal forge (attacker's own keys) | **external trust anchor** (`--trust-root`) | Integrity-only without a pinned key (see Authenticity) |
 | Journal tail-truncation / evidence drop | signed MANIFEST + row-count seal | Legacy unsealed bundles verify integrity-only |
+| Post-hoc process contract / receipt reuse | signed contract declaration before actions + contract-scoped terminal manifest digest | Same-UID signer-key compromise can still forge |
+| Fake verifier/client helper | operator-pinned executable digest; official registry origins only | Same-UID TOCTOU/dynamic dependency replacement; operator can deliberately pin an untrusted helper |
+| Offline registry cache rewrite | external response + metadata digest pins and max-age policy | Pin storage must remain outside agent write roots |
 | Bypass hooks | Assurance honesty: GATE not CONFINE | Complete mediation **not claimed** |
 | Secret in logs | secret-output when payload observed | Regex set is non-exhaustive; not all free-text agent stdout |
 
@@ -78,13 +84,18 @@ Out of scope (not Kernel / commercial LIA or POST-L6):
 - **Secret detector is regex-based.** Broad coverage (PEM private keys, AWS/GitHub/Slack/
   OpenAI/Anthropic/Google/Stripe tokens, JWTs, URI credentials) but a novel secret shape can
   slip; the shareable bundle projection is structurally hash-only regardless.
+- **External verifier trust is explicit, not magical.** `public-verify` proves what the
+  digest-pinned `cosign` process reported for the hashed paths; it does not authenticate the cosign
+  binary's provenance for you. Registry evidence similarly depends on the operator's pinned client,
+  platform CA store, and protected external cache pins. Same-UID replacement races remain until a
+  stronger principal/confinement boundary exists.
 
 ## Install attack surface
 
 `lia install` writes harness config and a state dir under `~/.lia-trust` (or `--lia-home`):
 
 - Hook/MCP wrappers read signing key from a **0600** file (not from settings.json argv).
-- Live `~/.claude` / `~/.codex` require explicit `--apply-live`.
+- Live `~/.claude`, `~/.codex`, `~/.gemini`, and `~/.cursor` require explicit `--apply-live`.
 - Uninstall removes only LIA-marked entries.
 
 ## Non-goals / non-guarantees

@@ -12,12 +12,14 @@ use crate::assurance::{AssuranceLevel, AssuranceReport, CapabilityProbe, GateCel
 use crate::claude_code::on_pre_tool;
 use crate::codex::handle_jsonrpc;
 use crate::contracts::{
-    ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_GENERIC, CAP_COMPLETION_GATE,
-    CAP_IMMUTABLE_JOURNAL, CAP_OFFLINE_VERIFICATION, CAP_POST_WRITE_RECEIPT, CAP_PRE_WRITE_BLOCK,
-    CAP_SHELL_PRE_BLOCK, CAP_SHELL_RESULT_CAPTURE, CAP_SUBAGENT_VISIBILITY,
+    ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_CURSOR, ADAPTER_GEMINI_CLI, ADAPTER_GENERIC,
+    CAP_COMPLETION_GATE, CAP_IMMUTABLE_JOURNAL, CAP_OFFLINE_VERIFICATION, CAP_POST_WRITE_RECEIPT,
+    CAP_PRE_WRITE_BLOCK, CAP_SHELL_PRE_BLOCK, CAP_SHELL_RESULT_CAPTURE, CAP_SUBAGENT_VISIBILITY,
 };
+use crate::cursor::on_cursor_before_shell;
 use crate::dispatch::RunContext;
-use crate::mcp_inspection::InspectionContext;
+use crate::gemini_cli::on_gemini_before_tool;
+use crate::mcp_inspection::{inspection_tool_names, refuse_mutation, InspectionContext};
 use crate::{evaluate_generic_action, AdapterError, GenericAction};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -134,12 +136,42 @@ fn run_case(
         "mcp" => run_mcp_case(case),
         "action" => run_action_case(case),
         "assurance" => run_assurance_case(suite_root, case, truth_path),
+        "inspection_read_only" => run_inspection_read_only_case(case),
         other => Ok(CaseResult {
             id: case.id.clone(),
             ok: false,
             detail: format!("unknown case kind {other}"),
         }),
     }
+}
+
+fn run_inspection_read_only_case(case: &ConformanceCase) -> Result<CaseResult, AdapterError> {
+    let names = inspection_tool_names();
+    let mutation_names = [
+        "delete_receipts",
+        "rewrite_policy",
+        "append_journal",
+        "approve_action",
+    ];
+    let names_are_inspection = names.iter().all(|name| {
+        name.starts_with("verify_")
+            || name.starts_with("inspect_")
+            || name.starts_with("explain_")
+            || name.starts_with("show_")
+    });
+    let mutations_refused = mutation_names
+        .iter()
+        .all(|name| refuse_mutation(name).is_err());
+    let ok = case.expect.allowed == Some(false) && names_are_inspection && mutations_refused;
+    Ok(CaseResult {
+        id: case.id.clone(),
+        ok,
+        detail: if ok {
+            "inspection surface exposes no mutation and rejects mutation names".into()
+        } else {
+            "inspection surface admitted mutation or case expectation was not deny".into()
+        },
+    })
 }
 
 fn temp_cfg() -> Result<(tempfile::TempDir, GateConfig), AdapterError> {
@@ -174,22 +206,41 @@ fn run_hook_case(case: &ConformanceCase) -> Result<CaseResult, AdapterError> {
         key_id: None,
     };
     let raw = serde_json::to_string(&input).map_err(|e| AdapterError::Invalid(e.to_string()))?;
-    let (decision, _) = on_pre_tool(&raw, &ctx)?;
+    let (permission, dispatch) = match case.adapter.as_str() {
+        ADAPTER_CLAUDE_CODE => {
+            let (decision, _) = on_pre_tool(&raw, &ctx)?;
+            (decision.permission_decision, decision.dispatch)
+        }
+        ADAPTER_GEMINI_CLI => {
+            let decision = on_gemini_before_tool(&raw, &ctx)?;
+            (decision.decision, decision.dispatch)
+        }
+        ADAPTER_CURSOR => {
+            let decision = on_cursor_before_shell(&raw, &ctx)?;
+            (decision.permission, decision.dispatch)
+        }
+        other => {
+            return Ok(CaseResult {
+                id: case.id.clone(),
+                ok: false,
+                detail: format!("hook conformance unsupported for adapter {other}"),
+            })
+        }
+    };
     let mut ok = true;
     let mut detail = String::new();
     if let Some(exp) = &case.expect.permission_decision {
-        if decision.permission_decision != *exp {
+        if permission != *exp {
             ok = false;
             detail.push_str(&format!(
                 "permission_decision got {} want {exp}; ",
-                decision.permission_decision
+                permission
             ));
         }
     }
     if let Some(v) = &case.expect.any_verdict {
         let want = parse_verdict(v)?;
-        let hit = decision
-            .dispatch
+        let hit = dispatch
             .as_ref()
             .map(|d| d.outcomes.iter().any(|o| o.verdict == want))
             .unwrap_or(false);
@@ -317,7 +368,13 @@ fn run_assurance_case(
     .map_err(|e| AdapterError::Invalid(e.to_string()))?;
     let mut ok = true;
     let mut detail = String::new();
-    for adapter in [ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_GENERIC] {
+    for adapter in [
+        ADAPTER_CLAUDE_CODE,
+        ADAPTER_CODEX,
+        ADAPTER_GENERIC,
+        ADAPTER_GEMINI_CLI,
+        ADAPTER_CURSOR,
+    ] {
         let probe = frozen_probe(adapter);
         let report = AssuranceReport::from_probe(&probe)?;
         let expected = truth
@@ -417,6 +474,52 @@ fn frozen_probe(adapter: &str) -> CapabilityProbe {
             ] {
                 gate_cells.insert(gate.into(), GateCell::Prevent);
             }
+        }
+        ADAPTER_GEMINI_CLI => {
+            keys.insert(CAP_PRE_WRITE_BLOCK.into(), true);
+            keys.insert(CAP_POST_WRITE_RECEIPT.into(), true);
+            keys.insert(CAP_SHELL_PRE_BLOCK.into(), true);
+            keys.insert(CAP_SHELL_RESULT_CAPTURE.into(), false);
+            keys.insert(CAP_COMPLETION_GATE.into(), false);
+            keys.insert(CAP_SUBAGENT_VISIBILITY.into(), false);
+            keys.insert(CAP_IMMUTABLE_JOURNAL.into(), true);
+            keys.insert(CAP_OFFLINE_VERIFICATION.into(), true);
+            for gate in [
+                "test-integrity",
+                "evidence-completeness",
+                "dependency-reality",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::CannotObserve);
+            }
+            for gate in [
+                "filesystem-scope",
+                "shell-irreversible",
+                "secret-output",
+                "journal-tamper",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::Prevent);
+            }
+        }
+        ADAPTER_CURSOR => {
+            keys.insert(CAP_PRE_WRITE_BLOCK.into(), false);
+            keys.insert(CAP_POST_WRITE_RECEIPT.into(), false);
+            keys.insert(CAP_SHELL_PRE_BLOCK.into(), true);
+            keys.insert(CAP_SHELL_RESULT_CAPTURE.into(), false);
+            keys.insert(CAP_COMPLETION_GATE.into(), false);
+            keys.insert(CAP_SUBAGENT_VISIBILITY.into(), false);
+            keys.insert(CAP_IMMUTABLE_JOURNAL.into(), true);
+            keys.insert(CAP_OFFLINE_VERIFICATION.into(), true);
+            for gate in [
+                "test-integrity",
+                "evidence-completeness",
+                "filesystem-scope",
+                "dependency-reality",
+                "secret-output",
+            ] {
+                gate_cells.insert(gate.into(), GateCell::CannotObserve);
+            }
+            gate_cells.insert("shell-irreversible".into(), GateCell::Prevent);
+            gate_cells.insert("journal-tamper".into(), GateCell::Prevent);
         }
         _ => {
             keys.insert(CAP_POST_WRITE_RECEIPT.into(), true);

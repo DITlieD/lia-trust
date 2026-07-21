@@ -35,3 +35,4 @@ lia-journal = { workspace = true }
 lia-verify = { workspace = true }
 tempfile = { workspace = true }
 hex = { workspace = true }
+sha2 = { workspace = true }

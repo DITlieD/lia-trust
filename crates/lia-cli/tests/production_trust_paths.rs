@@ -135,8 +135,21 @@ fn generic_wrap_persists_a_signed_journal_outside_the_child_worktree() {
     let report = output_json(&output);
     let journal = PathBuf::from(report["journal_path"].as_str().expect("journal path"));
     let worktree = PathBuf::from(report["worktree"].as_str().expect("worktree"));
+    let process_contract = PathBuf::from(
+        report["process_contract_path"]
+            .as_str()
+            .expect("process contract path"),
+    );
+    let process_execution = PathBuf::from(
+        report["process_execution_path"]
+            .as_str()
+            .expect("process execution path"),
+    );
     assert!(journal.is_file(), "generic wrap did not create journal");
     assert!(!journal.starts_with(&worktree), "journal is child-writable");
+    assert_eq!(report["process_validation"]["followed"], true);
+    assert!(process_contract.is_file());
+    assert!(process_execution.is_file());
 
     let verify = Command::new(lia_bin())
         .args(["journal-verify", journal.to_str().expect("journal path")])
@@ -146,6 +159,24 @@ fn generic_wrap_persists_a_signed_journal_outside_the_child_worktree() {
         verify.status.success(),
         "verify stderr={}",
         String::from_utf8_lossy(&verify.stderr)
+    );
+
+    let contract_verify = Command::new(lia_bin())
+        .args([
+            "process-contract-validate",
+            "--contract",
+            process_contract.to_str().expect("contract path"),
+            "--execution",
+            process_execution.to_str().expect("execution path"),
+            "--journal",
+            journal.to_str().expect("journal path"),
+        ])
+        .output()
+        .expect("verify generic process contract");
+    assert!(
+        contract_verify.status.success(),
+        "contract stderr={}",
+        String::from_utf8_lossy(&contract_verify.stderr)
     );
 }
 

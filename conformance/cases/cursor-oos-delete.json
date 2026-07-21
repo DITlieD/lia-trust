@@ -1,0 +1,13 @@
+{
+  "id": "cursor-oos-delete",
+  "adapter": "cursor",
+  "kind": "hook",
+  "input": {
+    "command": "rm -rf /tmp/outside-lia-conformance",
+    "sandbox": false
+  },
+  "expect": {
+    "permission_decision": "deny",
+    "any_verdict": "deny"
+  }
+}

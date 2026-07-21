@@ -3,11 +3,15 @@ mod claude_code;
 mod codex;
 mod conformance;
 mod contracts;
+mod cursor;
 mod dispatch;
+mod gemini_cli;
 mod generic;
 mod install;
 mod mcp_inspection;
 mod mcp_stdio;
+mod process_contract;
+mod registry;
 
 pub use assurance::{
     known_adapters, load_assurance_from_probe_file, report_for_adapter, AssuranceLevel,
@@ -23,26 +27,47 @@ pub use codex::{
 };
 pub use conformance::{assert_adapter, load_suite, ConformanceReport, SuiteManifest};
 pub use contracts::{
-    contracts_value, load_contracts, ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_GENERIC,
-    ALL_CAPABILITY_KEYS, CONTRACTS_JSON, MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
+    contracts_value, load_contracts, ADAPTER_CLAUDE_CODE, ADAPTER_CODEX, ADAPTER_CURSOR,
+    ADAPTER_GEMINI_CLI, ADAPTER_GENERIC, ALL_CAPABILITY_KEYS, CONTRACTS_JSON,
+    MCP_INSPECT_EXPLAIN_DENIAL, MCP_INSPECT_INSPECT_RECEIPTS,
     MCP_INSPECT_SHOW_ADAPTER_CAPABILITIES, MCP_INSPECT_SHOW_POLICY, MCP_INSPECT_VERIFY_RUN,
+};
+pub use cursor::{
+    handle_cursor_mcp_stdin, handle_cursor_shell_stdin, on_cursor_before_mcp,
+    on_cursor_before_shell, CursorHookDecision, CursorMcpInput, CursorShellInput,
 };
 pub use dispatch::{
     denial_summary, dispatch_action, is_blocking, worst_verdict, DispatchResult, RunContext,
 };
+pub use gemini_cli::{
+    handle_gemini_before_tool_stdin, map_gemini_tool_to_action, on_gemini_before_tool,
+    parse_gemini_before_tool, GeminiBeforeToolInput, GeminiHookDecision,
+};
 pub use generic::{admit_final_diff, wrap, WrapOptions, WrapReport};
 pub use install::{
-    claude_hook_present, codex_mcp_present, default_claude_home, default_codex_home,
-    default_lia_home, install, looks_like_live_user_home, merge_claude_settings, merge_codex_toml,
-    status, uninstall, unmerge_claude_settings, unmerge_codex_toml, InstallError, InstallPaths,
-    InstallReport, InstallRequest, KernelBoundary, CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER,
-    LIA_HOOK_MARKER, MANIFEST_NAME,
+    claude_hook_present, codex_mcp_present, cursor_hooks_present, default_claude_home,
+    default_codex_home, default_cursor_home, default_gemini_home, default_lia_home,
+    gemini_hook_present, install, looks_like_live_user_home, merge_claude_settings,
+    merge_codex_toml, merge_cursor_hooks, merge_gemini_settings, status, uninstall,
+    unmerge_claude_settings, unmerge_codex_toml, unmerge_cursor_hooks, unmerge_gemini_settings,
+    InstallError, InstallPaths, InstallReport, InstallRequest, KernelBoundary,
+    CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER, GEMINI_BEFORETOOL_MATCHER, LIA_HOOK_MARKER,
+    MANIFEST_NAME,
 };
 pub use mcp_inspection::{
     handle_inspection_call, inspection_tool_names, load_probe, refuse_mutation, DenialRecord,
     InspectionContext,
 };
 pub use mcp_stdio::{frame_json, read_framed_message, write_framed_message};
+pub use process_contract::{
+    load_and_validate_process_contract, process_contract_sha256, process_execution_manifest_sha256,
+    validate_process_contract, ProcessContractError, ProcessValidationFinding,
+    ProcessValidationReport,
+};
+pub use registry::{
+    collect_registry_evidence, RegistryEcosystem, RegistryEvidenceError, RegistryEvidenceOptions,
+    RegistryEvidenceReport,
+};
 
 use lia_gates::{
     evaluate_action_gates, evaluate_gate, GateConfig, GateOutcome, GatePayload, GateRequest,

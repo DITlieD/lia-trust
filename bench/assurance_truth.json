@@ -35,6 +35,30 @@
       "journal-tamper": "PREVENT"
     }
   },
+  "gemini-cli": {
+    "level": "GATE",
+    "gates": {
+      "test-integrity": "CANNOT-OBSERVE",
+      "evidence-completeness": "CANNOT-OBSERVE",
+      "filesystem-scope": "PREVENT",
+      "shell-irreversible": "PREVENT",
+      "dependency-reality": "CANNOT-OBSERVE",
+      "secret-output": "PREVENT",
+      "journal-tamper": "PREVENT"
+    }
+  },
+  "cursor": {
+    "level": "GATE",
+    "gates": {
+      "test-integrity": "CANNOT-OBSERVE",
+      "evidence-completeness": "CANNOT-OBSERVE",
+      "filesystem-scope": "CANNOT-OBSERVE",
+      "shell-irreversible": "PREVENT",
+      "dependency-reality": "CANNOT-OBSERVE",
+      "secret-output": "CANNOT-OBSERVE",
+      "journal-tamper": "PREVENT"
+    }
+  },
   "terminus-lia": {
     "level": "GATE",
     "note": "Harbor TB2/Claw path: shell-irreversible PREVENT only; ground/syco/ast/completion CANNOT-OBSERVE. Do not pool with generic live-tool-loop.",

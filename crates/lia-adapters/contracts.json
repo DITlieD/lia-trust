@@ -1,9 +1,14 @@
 {
-  "pinned_at": "2026-07-18",
+  "pinned_at": "2026-07-22",
   "sources": {
     "claude_code_hooks": "https://code.claude.com/docs/en/hooks",
     "mcp_tools": "https://modelcontextprotocol.io/specification/2025-03-26/server/tools",
-    "codex_mcp": "https://developers.openai.com/codex/guides/agents-sdk"
+    "codex_mcp": "https://developers.openai.com/codex/guides/agents-sdk",
+    "gemini_cli_hooks": "https://geminicli.com/docs/hooks/reference/",
+    "cursor_hooks": "https://cursor.com/docs/hooks",
+    "sigstore_cosign_verify": "https://docs.sigstore.dev/cosign/verifying/verify/",
+    "cargo_registry_index": "https://doc.rust-lang.org/cargo/reference/registry-index.html",
+    "npm_registry": "https://docs.npmjs.com/cli/v8/using-npm/registry/"
   },
   "claude_code": {
     "hook_event_pre_tool_use": "PreToolUse",
@@ -13,7 +18,7 @@
     "hook_entry_fields": ["matcher", "hooks"],
     "hook_command_fields": ["type", "command", "timeout"],
     "hook_command_type": "command",
-    "install_matcher": "Bash|Write|Edit|Read|Delete|MultiEdit",
+    "install_matcher": "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit",
     "install_marker": "lia-trust-kernel",
     "stdin_fields": [
       "session_id",
@@ -73,12 +78,57 @@
     "transport": "stdio",
     "install_marker": "lia-trust-kernel"
   },
+  "gemini_cli": {
+    "settings_file": "settings.json",
+    "event": "BeforeTool",
+    "install_matcher": "^(run_shell_command|write_file|replace|read_file)$",
+    "stdin_fields": ["session_id", "transcript_path", "cwd", "hook_event_name", "timestamp", "tool_name", "tool_input", "mcp_context", "original_request_name"],
+    "mapped_tools": ["run_shell_command", "write_file", "replace", "read_file"],
+    "stdout_fields": ["decision", "reason"],
+    "decision_values": ["allow", "deny"],
+    "block_exit_code": 2,
+    "timeout_milliseconds": 30000
+  },
+  "cursor": {
+    "hooks_file": "hooks.json",
+    "version": 1,
+    "events": ["beforeShellExecution", "beforeMCPExecution"],
+    "shell_input_fields": ["command", "cwd", "sandbox"],
+    "mcp_input_fields": ["tool_name", "tool_input", "url", "command"],
+    "stdout_fields": ["permission", "user_message", "agent_message"],
+    "permission_values": ["allow", "deny", "ask"],
+    "fail_closed": true,
+    "timeout_seconds": 30
+  },
+  "process_contract": {
+    "version": "lia-process-contract-v1",
+    "contract_fields": ["contract_version", "contract_id", "run_id", "objective", "assumptions", "required_evidence", "allowed_actions", "completion_predicate", "honest_stop_conditions"],
+    "execution_fields": ["contract_id", "contract_receipt_id", "performed_actions", "evidence", "supported_assumptions", "unresolved_claims", "outcome"],
+    "terminal_outcomes": ["complete", "honest_stop"],
+    "pre_action_receipt_family": "process_contract_declared"
+  },
+  "public_verification": {
+    "command": "cosign verify-blob",
+    "required_pins": ["certificate_identity", "certificate_oidc_issuer", "expected_cosign_sha256"],
+    "bundle_flag": "--bundle",
+    "delegated_external_verifier": true
+  },
+  "registry_evidence": {
+    "ecosystems": ["crates-io", "npm"],
+    "live_client": "digest-pinned curl argv without shell",
+    "authoritative_origins": ["https://index.crates.io", "https://registry.npmjs.org"],
+    "redirects": "disabled",
+    "maximum_response_bytes": 1048576,
+    "cache_binding": ["ecosystem", "package", "source_url", "http_client_sha256", "response_sha256", "response_bytes", "fetched_at"],
+    "offline_required_external_pins": ["expected_response_sha256", "expected_cache_manifest_sha256"],
+    "default_max_cache_age_seconds": 86400
+  },
   "kernel_install": {
     "cli": ["install", "status", "uninstall"],
     "lia_home_env": "LIA_HOME",
     "default_lia_home": "~/.lia-trust",
-    "state_layout": ["keys/signing.hex", "journal/default.db", "config.json", "bin/claude-pretool.sh", "bin/codex-mcp.sh", "install-manifest.json", "probe.json"],
-    "live_home_guard": "--apply-live required for real ~/.claude and ~/.codex",
+    "state_layout": ["keys/signing.hex", "journal/default.db", "config.json", "bin/claude-pretool.sh", "bin/codex-mcp.sh", "bin/gemini-beforetool.sh", "bin/cursor-before-shell.sh", "bin/cursor-before-mcp.sh", "install-manifest.json", "probe.json"],
+    "live_home_guard": "--apply-live required for real ~/.claude, ~/.codex, ~/.gemini, and ~/.cursor",
     "assurance": "GATE",
     "forbid_confine_v1": true
   },

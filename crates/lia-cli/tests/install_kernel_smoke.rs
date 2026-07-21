@@ -35,6 +35,8 @@ fn install_cli_fixture_wires_and_uninstalls() {
     let lia_home = tmp.path().join("lia-home");
     let claude = tmp.path().join("claude");
     let codex = tmp.path().join("codex");
+    let gemini = tmp.path().join("gemini");
+    let cursor = tmp.path().join("cursor");
     let repo = tmp.path().join("repo");
     fs::create_dir_all(&repo).unwrap();
 
@@ -49,6 +51,10 @@ fn install_cli_fixture_wires_and_uninstalls() {
             claude.to_str().unwrap(),
             "--codex-home",
             codex.to_str().unwrap(),
+            "--gemini-home",
+            gemini.to_str().unwrap(),
+            "--cursor-home",
+            cursor.to_str().unwrap(),
             "--allowed-root",
             repo.to_str().unwrap(),
             "--json",
@@ -63,6 +69,8 @@ fn install_cli_fixture_wires_and_uninstalls() {
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(report["claude_hook_installed"], true);
     assert_eq!(report["codex_mcp_installed"], true);
+    assert_eq!(report["gemini_hook_installed"], true);
+    assert_eq!(report["cursor_hooks_installed"], true);
     assert!(report["kernel"]["assurance"]
         .as_str()
         .unwrap_or("")
@@ -86,6 +94,11 @@ fn install_cli_fixture_wires_and_uninstalls() {
     assert!(settings.contains("lia-trust-kernel") || settings.contains("claude-pretool"));
     let toml = fs::read_to_string(codex.join("config.toml")).unwrap();
     assert!(toml.contains("[mcp_servers.lia-trust]"));
+    let gemini_settings = fs::read_to_string(gemini.join("settings.json")).unwrap();
+    assert!(gemini_settings.contains("gemini-beforetool"));
+    let cursor_hooks = fs::read_to_string(cursor.join("hooks.json")).unwrap();
+    assert!(cursor_hooks.contains("cursor-before-shell"));
+    assert!(cursor_hooks.contains("\"failClosed\": true"));
 
     // refuse live without flag (only if default homes would be live — smoke dry-run)
     let dry = Command::new(&lia)
@@ -112,6 +125,40 @@ fn install_cli_fixture_wires_and_uninstalls() {
     let wrap = lia_home.join("bin/codex-mcp.sh");
     assert!(wrap.exists(), "installed codex wrapper missing");
     drive_installed_codex_mcp_session(&wrap);
+    drive_installed_hook(
+        &lia_home.join("bin/gemini-beforetool.sh"),
+        serde_json::json!({
+            "session_id": "install-smoke",
+            "transcript_path": "/tmp/gemini-install-smoke.json",
+            "cwd": repo,
+            "hook_event_name": "BeforeTool",
+            "timestamp": "2026-07-22T00:00:00Z",
+            "tool_name": "run_shell_command",
+            "tool_input": {"command": "rm -rf /"}
+        }),
+        "decision",
+    );
+    drive_installed_hook(
+        &lia_home.join("bin/cursor-before-shell.sh"),
+        serde_json::json!({
+            "command": "rm -rf /",
+            "cwd": repo,
+            "sandbox": false
+        }),
+        "permission",
+    );
+    let journal_verify = Command::new(&lia)
+        .args([
+            "journal-verify",
+            lia_home.join("journal/default.db").to_str().unwrap(),
+        ])
+        .output()
+        .expect("verify installed adapter journal");
+    assert!(
+        journal_verify.status.success(),
+        "installed adapter journal failed verification: {}",
+        String::from_utf8_lossy(&journal_verify.stderr)
+    );
 
     let un = Command::new(&lia)
         .args([
@@ -122,6 +169,10 @@ fn install_cli_fixture_wires_and_uninstalls() {
             claude.to_str().unwrap(),
             "--codex-home",
             codex.to_str().unwrap(),
+            "--gemini-home",
+            gemini.to_str().unwrap(),
+            "--cursor-home",
+            cursor.to_str().unwrap(),
             "--json",
         ])
         .output()
@@ -134,6 +185,29 @@ fn install_cli_fixture_wires_and_uninstalls() {
     let urep: serde_json::Value = serde_json::from_slice(&un.stdout).unwrap();
     assert_eq!(urep["claude_hook_installed"], false);
     assert_eq!(urep["codex_mcp_installed"], false);
+    assert_eq!(urep["gemini_hook_installed"], false);
+    assert_eq!(urep["cursor_hooks_installed"], false);
+}
+
+fn drive_installed_hook(wrapper: &std::path::Path, input: serde_json::Value, field: &str) {
+    assert!(wrapper.exists(), "installed hook wrapper missing");
+    let mut child = Command::new(wrapper)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn installed hook");
+    child
+        .stdin
+        .take()
+        .expect("hook stdin")
+        .write_all(input.to_string().as_bytes())
+        .expect("write hook input");
+    let output = child.wait_with_output().expect("installed hook output");
+    assert_eq!(output.status.code(), Some(2));
+    let decision: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("hook JSON output");
+    assert_eq!(decision[field], "deny");
 }
 
 fn frame_msg(v: &serde_json::Value) -> Vec<u8> {

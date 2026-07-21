@@ -1,0 +1,9 @@
+{
+  "id": "mcp-inspection-read-only",
+  "adapter": "codex",
+  "kind": "inspection_read_only",
+  "input": {},
+  "expect": {
+    "allowed": false
+  }
+}

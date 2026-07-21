@@ -79,6 +79,8 @@ pub const ALL_CAPABILITY_KEYS: &[&str] = &[
 pub const ADAPTER_CLAUDE_CODE: &str = "claude-code";
 pub const ADAPTER_CODEX: &str = "codex";
 pub const ADAPTER_GENERIC: &str = "generic";
+pub const ADAPTER_GEMINI_CLI: &str = "gemini-cli";
+pub const ADAPTER_CURSOR: &str = "cursor";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ContractsFile {

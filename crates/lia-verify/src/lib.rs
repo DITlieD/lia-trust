@@ -7,13 +7,20 @@ use ed25519_dalek::{Signature, Signer, VerifyingKey};
 use lia_journal::{verify_chain, Journal, JournalError, SigningIdentity};
 use lia_policy::{
     evaluate_frozen, freeze_policy_from_path, load_evidence_json, validate_reason_code,
-    EvidenceItem, EvidenceSet, EvaluationReport,
+    EvaluationReport, EvidenceItem, EvidenceSet,
 };
 use lia_protocol::{canonical_json, Event, JournalRow, SignerIdentity};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
+
+mod public;
+
+pub use public::{
+    resolve_and_hash_executable, verify_blob_with_cosign, PublicVerificationError,
+    PublicVerificationOptions, PublicVerificationReport,
+};
 
 pub const BUNDLE_VERSION: &str = "lia-bundle-v1";
 pub const VERIFICATION_REPORT_VERSION: &str = "lia-verification-report-v1";
@@ -233,12 +240,9 @@ pub fn verify_bundle_with_anchor(
                         reason_code = "SIGNATURE_INVALID".into();
                         findings.push(finding("SIGNATURE_INVALID", e));
                     }
-                    if let Err(e) = replay_action_stream(
-                        bundle_dir,
-                        &manifest,
-                        &rows,
-                        &manifest.run_id,
-                    ) {
+                    if let Err(e) =
+                        replay_action_stream(bundle_dir, &manifest, &rows, &manifest.run_id)
+                    {
                         accepted = false;
                         reason_code = "REPLAY_MISMATCH".into();
                         findings.push(finding("REPLAY_MISMATCH", e));
@@ -903,7 +907,10 @@ rules:
         "prevention": false,
         "label": "AUDIT post-hoc verify-run; not prevention",
     });
-    fs::write(bundle_dir.join("audit-meta.json"), serde_json::to_vec_pretty(&meta)?)?;
+    fs::write(
+        bundle_dir.join("audit-meta.json"),
+        serde_json::to_vec_pretty(&meta)?,
+    )?;
 
     let manifest = BundleManifest {
         bundle_version: BUNDLE_VERSION.to_string(),
@@ -928,7 +935,14 @@ rules:
 
 fn git_diff(repo: &Path, base: &str, head: &str) -> Result<Vec<u8>, VerifyError> {
     let output = std::process::Command::new("git")
-        .args(["-C", &repo.display().to_string(), "diff", "--binary", base, head])
+        .args([
+            "-C",
+            &repo.display().to_string(),
+            "diff",
+            "--binary",
+            base,
+            head,
+        ])
         .output()
         .map_err(|e| VerifyError::Bundle(format!("git diff failed to spawn: {e}")))?;
     if !output.status.success() {
@@ -1035,18 +1049,12 @@ fn load_signing_config(path: impl AsRef<Path>) -> Result<SigningConfigSnapshot, 
     Ok(serde_json::from_slice(&bytes)?)
 }
 
-fn recompute_evidence_hashes(
-    bundle_dir: &Path,
-    entries: &[EvidenceEntry],
-) -> Result<u64, String> {
+fn recompute_evidence_hashes(bundle_dir: &Path, entries: &[EvidenceEntry]) -> Result<u64, String> {
     let mut checked = 0u64;
     for entry in entries {
         let path = bundle_dir.join(&entry.relative_path);
         if !path.is_file() {
-            return Err(format!(
-                "evidence file missing: {}",
-                entry.relative_path
-            ));
+            return Err(format!("evidence file missing: {}", entry.relative_path));
         }
         let bytes = fs::read(&path).map_err(|e| e.to_string())?;
         let got = sha256_hex(&bytes);
@@ -1229,7 +1237,11 @@ fn report_signing_payload(report: &VerificationReport) -> Result<String, VerifyE
     Ok(canonical_json(&value)?)
 }
 
-fn verify_ed25519(public_key_hex: &str, message: &[u8], signature_hex: &str) -> Result<(), VerifyError> {
+fn verify_ed25519(
+    public_key_hex: &str,
+    message: &[u8],
+    signature_hex: &str,
+) -> Result<(), VerifyError> {
     let pk_bytes = hex::decode(public_key_hex)?;
     if pk_bytes.len() != 32 {
         return Err(VerifyError::Crypto(format!(
@@ -1270,8 +1282,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
         let mut report = verify_bundle(&bundle).expect("verify");
         assert!(report.accepted, "findings: {:?}", report.findings);
         assert_eq!(report.reason_code, "ACCEPTED");
@@ -1305,7 +1316,10 @@ mod tests {
             honest_verifier.public_key_hex(),
         ]);
         let report = verify_bundle_with_anchor(&bundle, Some(&anchor)).expect("verify");
-        assert!(!report.accepted, "forged bundle must be rejected under a pinned anchor");
+        assert!(
+            !report.accepted,
+            "forged bundle must be rejected under a pinned anchor"
+        );
         assert_eq!(report.reason_code, "TRUST_ANCHOR_MISMATCH");
         assert_eq!(report.authenticity, "mismatch");
 
@@ -1325,8 +1339,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
         assert!(verify_bundle(&bundle).expect("verify").sealed);
 
         // delete the last journal row directly (drop the append-only triggers first)
@@ -1358,8 +1371,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
 
         let mut manifest = load_manifest(&bundle).expect("manifest");
         manifest.evidence.clear(); // attacker drops evidence, leaves MANIFEST.sig intact
@@ -1370,7 +1382,10 @@ mod tests {
         .expect("rewrite");
 
         let report = verify_bundle(&bundle).expect("verify");
-        assert!(!report.accepted, "evidence drop must break the manifest seal");
+        assert!(
+            !report.accepted,
+            "evidence drop must break the manifest seal"
+        );
         assert_eq!(report.reason_code, "SIGNATURE_INVALID");
     }
 
@@ -1379,8 +1394,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
 
         let artifact = bundle.join("evidence/artifact.bin");
         let mut bytes = fs::read(&artifact).expect("read");
@@ -1397,8 +1411,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
         fs::remove_file(bundle.join("trust-root.json")).expect("rm");
         let err = verify_bundle(&bundle).expect_err("must fail");
         let msg = err.to_string();
@@ -1413,8 +1426,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tmpdir");
         let journal_id = SigningIdentity::generate("journal");
         let verifier_id = SigningIdentity::generate("verifier");
-        let (bundle, _) =
-            build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
+        let (bundle, _) = build_demo_bundle(dir.path(), &journal_id, &verifier_id).expect("build");
         let mut report = verify_bundle(&bundle).expect("verify");
         assert!(report.accepted);
         assert!(report.signature_hex.is_empty());

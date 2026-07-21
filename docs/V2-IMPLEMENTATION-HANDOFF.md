@@ -76,7 +76,7 @@ to decide that a deletion is legitimate.
 | L0b | Dogfood wiring/freeze/dead-code CI | `tools/lia_wire_check`, `tools/lia_gate_freeze`, `.github/workflows/wire.yml` | SHIPPED | wire/freeze scripts and CI definitions pass at final HEAD | M6 reproof |
 | L1 | Frozen rules-as-data, stable reasons, fail-closed policy | `lia-policy`; policy and gate reason-code locks | SHIPPED | policy/golden tests plus malformed/missing-policy CLI cases | M6 reproof |
 | L2 | Seven deterministic core gates | seven `lia-gates` modules and dispatch mapping | SHIPPED | adversarial fixtures, compiled CLI, journal/verify proof for each class | M2/M6 reproof |
-| L3 | Thin adapters plus capability-derived assurance | Claude hook, Codex MCP proxy, generic wrap exist; Gemini/Cursor absent | PARTIAL | adapter conformance and probe-derived report for every shipped adapter | M4 |
+| L3 | Thin adapters plus capability-derived assurance | Claude, Codex, Gemini CLI, Cursor, and generic boundaries now have explicit mappings and honest per-adapter cells | SHIPPED | adapter conformance and probe-derived report for every shipped adapter | M4 complete; M6 reproof |
 | L4 | Ground, syco, AST, taint with production consumers | Claude/Codex writes use central AST dispatch; Codex exposes signed ground/syco/taint paths; unsupported Terminus cells remain CANNOT-OBSERVE | SHIPPED | 8/8 production-path cases plus signed receipts and offline verification | M2 complete; M6 reproof |
 | L5 | Three-arm trust benchmark and utility companion | recorded corpora and scorecards exist; some live/utility lanes remain partial/deferred | PARTIAL | current frozen corpus replay, separated recorded/live metrics, optional external lanes labeled | M6 |
 | L6 | Conformance/action/docs/release pack | docs, action, conformance suite, README and `v0.1.0` tag exist; no prebuilt release artifact, sample-repo Action bundle, or different-machine verification evidence is present | PARTIAL | tagged prebuilt release, sample-repo Action bundle, and separately built/different-machine verification proof, or exact external blocker | M6 |
@@ -126,8 +126,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P3-2 | Claw companion signal | documented companion metric | SHIPPED | claims remain non-product and non-pooled | M6 |
 | P3-3 | AST/taint corpus classes | corpus and runner classes exist | SHIPPED | current by-class replay | M2/M6 |
 | P3-4 | network/egress confinement | no backend; capability false | MISSING | supported Linux backend proves egress deny; unsupported hosts fail closed/honest | M5 |
-| P3-5 | Gemini CLI and Cursor adapters | roadmap/docs only; no production modules | MISSING | adapters, installers/launchers, conformance, probes, receipts | M4 |
-| P3-6 | full typed process contract | completion half only; full schema and validator absent | MISSING | versioned contract schema, state transitions, validator, CLI/adapter proof | M4 |
+| P3-5 | Gemini CLI and Cursor adapters | documented native hook modules, idempotent installers, installed-wrapper smoke, conformance, signed denials, and honest unmatched-tool behavior `[MEASURED]` | SHIPPED | adapters, installers/launchers, conformance, probes, receipts | M4 complete; live harness agents remain M6 external lane |
+| P3-6 | full typed process contract | versioned schema; signed pre-action declaration; typed action/evidence/assumption/claim/outcome state; signed terminal execution manifest | SHIPPED | versioned contract schema, state transitions, validator, CLI/adapter proof | M4 complete; M6 reproof |
 | P3-7 | MCP inspection/live agent PREVENT | inspection UX and recorded adapters shipped; live OAuth not run | PARTIAL | inspection conformance; live portion remains exact external credential gate | M4/M6 |
 | P3-8 | funding applications | process documentation only by design | EXTERNAL-ONLY | local claims-clean prerequisites; no submission in this task | M6 record |
 
@@ -138,16 +138,16 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | `docs/shell-rm-policy.md` | explicit policy-approved in-root cleanup | V2 schema and deterministic gate are live with receipt-backed CLI coverage | SHIPPED | M1 independent PASS; final-head replay in M6 | M1 complete; M6 reproof |
 | roadmap P3-1 | second utility model lane | lane machinery exists, execution deferred | PARTIAL | validate local configuration; record external model/service/cost execution gate | M6 |
 | roadmap P3-4 | network/egress CONFINE | capability key false, no backend | MISSING | local Linux network namespace/deny proof where supported | M5 |
-| roadmap P3-5 | Gemini CLI adapter | no module/contract/conformance case | MISSING | real supported hook/proxy entrypoint plus signed deny | M4 |
-| roadmap P3-5 | Cursor adapter | no module/contract/conformance case | MISSING | real supported hook/proxy entrypoint plus signed deny | M4 |
-| roadmap P3-6 | full typed process-contract validator | evidence-completeness only | MISSING | schema, transition validator, reason codes, CLI/adapter proof | M4 |
+| roadmap P3-5 | Gemini CLI adapter | documented BeforeTool mapping, install merge, conformance and installed-wrapper signed deny | SHIPPED-LOCAL | real supported hook/proxy entrypoint plus signed deny | M4 complete |
+| roadmap P3-5 | Cursor adapter | fail-closed shell/MCP hook mapping, install merge, conformance and installed-wrapper signed deny | SHIPPED-LOCAL | real supported hook/proxy entrypoint plus signed deny | M4 complete |
+| roadmap P3-6 | full typed process-contract validator | pre-action contract digest and full execution-state terminal manifest are enforced | SHIPPED | schema, transition validator, reason codes, CLI/adapter proof | M4 complete |
 | roadmap P3-7 | live Claude/Codex agent PREVENT | recorded lanes only | PARTIAL | local conformance complete; live run requires owner OAuth/service | M6 |
 | roadmap P3-8 | funding applications | docs only, intentionally post-release | EXTERNAL-ONLY | no external submission; claims-clean template/state only | M6 |
-| roadmap P3-9 / HL-5 | optional cosign public-log verification | offline Ed25519 only | MISSING | optional executable verifier with timeout and fixture/mock; live log external | M4 |
+| roadmap P3-9 / HL-5 | optional cosign public-log verification | digest-pinned external cosign path with identity/issuer pins, input hashes, bounded process-group/output lifecycle | SHIPPED-LOCAL | optional executable verifier with timeout and fixture/mock; live log external | M4 complete; live log M6 external gate |
 | roadmap P3-10 | Linux namespace CONFINE backend | absent | MISSING | supported-host namespace/process proof and honest fallback | M5 |
 | threat model | signing identity outside agent principal | key file shares user identity today | PARTIAL | brokered FD/process boundary and file-permission checks; OS principal separation external | M5 |
 | threat model | credential broker | capability false, env allowlist still includes credential-adjacent vars | MISSING | secret-minimized child environment and scoped credential delivery/expiry | M5 |
-| threat model | live registry dependency evidence | fixture snapshots only | MISSING | bounded client, pinned response evidence, offline/cache semantics, timeout | M4 |
+| threat model | live registry dependency evidence | fixed official crates.io/npm HTTPS origins, pinned client, bounded response/process, externally pinned and age-bounded offline cache | SHIPPED-LOCAL | bounded client, pinned response evidence, offline/cache semantics, timeout | M4 complete; live network sample M6 optional |
 | threat model | persistent evidence outside writable worktree | generic wrap signs process/diff events externally; Terminus uses per-trial external evidence; hook install still shares user identity | PARTIAL | M2 persistence/tamper proof complete; separate-principal ownership remains | M5 |
 
 ## Discrepancy map
@@ -369,8 +369,70 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M4 — process contracts and adapter/public-verification fast-follows
 
-- State: pending
+- State: `AUDITED_READY_TO_COMMIT`
 - Requirements: P3-5/6/7 local portion, P3-9, live registry client
+- Official interface grounding: Gemini `BeforeTool` fields/decision/exit behavior from
+  `https://geminicli.com/docs/hooks/reference/`; Cursor hook events, permission response, and
+  security-critical `failClosed` flag from `https://cursor.com/docs/hooks`; cosign `verify-blob`
+  bundle plus certificate identity/issuer pins from
+  `https://docs.sigstore.dev/cosign/verifying/verify/`; authoritative crates sparse-index and npm
+  registry semantics from `https://doc.rust-lang.org/cargo/reference/registry-index.html` and
+  `https://docs.npmjs.com/cli/v8/using-npm/registry/`.
+- RED evidence: independent auditor compiled and ran
+  `cargo test -p lia-cli --test m4_process_adapters_public_registry`; 0/4 cases passed because the
+  process validator, Gemini/Cursor hook entrypoints, public verifier, and registry evidence command
+  did not exist. This was valid missing-behavior RED, not fixture failure.
+- Completed process boundary: `lia-process-contract-v1` declares objective, assumptions, required
+  evidence, allowed actions, completion predicate, and honest-stop conditions. A signed
+  `process_contract_declared` digest must precede every referenced action. Evidence requirement,
+  execution reference, and signed `EvidenceCaptured.kind`/digest must agree. Complete/honest-stop
+  receipts bind a deterministic execution manifest containing contract digest, action/evidence
+  receipts, assumption support, unresolved claims, and terminal assertion. Honest stop also binds
+  the declared condition and typed non-empty tried/missing/route data. Generic wrap emits and
+  validates this contract without claiming to be a planner or repair system.
+- Completed adapters: Gemini CLI documented `BeforeTool` mapping for shell/write/replace/read with
+  additive-field compatibility and deny on an unsupported tool that reaches the matcher; Cursor
+  documented shell/MCP hooks with `failClosed:true`, mapped shared-gate dispatch, and explicit `ask`
+  for unknown MCP semantics. Install/status/uninstall merge all four harness homes idempotently;
+  fixture-installed Gemini/Cursor wrappers produce signed hard denials and the combined journal
+  verifies.
+- Completed external evidence: `public-verify` delegates to a digest-pinned `cosign`, pins identity
+  and issuer, records verifier/artifact/bundle hashes and sizes, detects input changes, caps output,
+  and on Unix owns a process group plus deadline-bounded drains. `registry-evidence` rejects custom
+  origins and redirects, requires HTTPS/TLS and a pinned client, caps response/output/time, parses
+  official crates.io/npm shapes, and only accepts offline cache with external response+metadata pins
+  and a maximum age. Cached positives use distinct `*_PINNED_CACHE` reasons.
+- Adversarial audit history: first GREEN checkpoint passed 12/12 `[MEASURED]`, then expanded focused/adapters/
+  conformance checks passed 33/33 `[MEASURED]` but independent source review returned BLOCK because evidence kinds,
+  assumption/claim state and completion receipts were not manifest-bound and arbitrary helper
+  binaries could mint VERIFIED. Remediation added the signed execution manifest, evidence-kind and
+  ordering checks, executable/source/cache trust pins, input hashes, and process-group lifecycle.
+  Re-audit passed 33/33 `[MEASURED]` with no BLOCK; a remaining inherited-pipe warning was then closed with
+  deadline-bounded channels and leader-exits/descendant-holds-pipe tests. Final focused audit passed
+  4/4 `[MEASURED]` with no warning or block.
+- Final audit `[MEASURED]`: `cargo test --workspace` passed 135/135 `[MEASURED]` and
+  `cargo check --workspace` passed. Conformance passed 10/10 `[MEASURED]`; gate freeze, the wire
+  checker over every changed/new Rust file, docs/README claims lint, JSON parsing, and
+  `git diff --check` all passed. Installed-wrapper smoke passed 1/1 `[MEASURED]`. All 18/18
+  changed/new Rust files were formatting-clean `[MEASURED]`.
+- Baseline debt `[MEASURED]`: strict clippy still reports three findings in unchanged `lia-gates`
+  code (two `needless_return`, one `too_many_arguments`), and workspace rustfmt reports drift in
+  18 unchanged files. Independent audit found no M4-delta lint/format defect and no BLOCK. These
+  baseline findings are assigned to M6 rather than concealed as an M4 pass.
+- Local measurement honesty: all cosign/client, Gemini/Cursor, and cache results in this milestone are
+  local fixtures/conformance. No live Gemini/Cursor cloud-agent session, Sigstore public-log lookup,
+  or real registry network lookup is claimed. Gemini consumer-tier migration affects availability,
+  not the pinned adapter schema.
+- Dependencies: direct `libc` use for Unix process-group termination (already present transitively,
+  now explicit in the relevant crates); `sha2` test dependency for deterministic fixture pins.
+- Assurance ceiling: mapped hook/MCP paths are `GATE` `[MEASURED]`; unmatched/non-tool behavior, same-UID signer or
+  executable replacement, dynamic-library trust, and network/process CONFINE remain outside this
+  milestone. Operator-supplied executable/cache digests are trust roots and must live outside agent
+  write roots. Windows lacks the Unix process-group guarantee and must not inherit that claim.
+- Blocker: none for local M4 scope. Live agent/public-log/registry-network evidence remains optional
+  external M6 proof and is never substituted by fixture results.
+- Next action: commit the audited M4 implementation, record its hash, then begin M5 RED
+  confinement/egress/credential isolation fixtures.
 - Commit: pending
 
 ### M5 — confinement, egress, and credential/evidence isolation

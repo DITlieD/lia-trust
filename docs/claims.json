@@ -155,11 +155,18 @@
       "pointer": "bench/harbor/results/m3-deny-memo-measure.json"
     },
     {
-      "text": "lia install wires Claude Code PreToolUse + Codex mcp_servers.lia-trust; installed codex-mcp.sh speaks Content-Length framed MCP with initialize handshake then HARD fabricated-pass and OOS-delete DENY; Claude installed hook DENY; journal-verify OK [MEASURED]. Assurance remains GATE not CONFINE.",
+      "text": "lia install wires Claude Code PreToolUse, Codex mcp_servers.lia-trust, Gemini CLI BeforeTool, and Cursor fail-closed shell/MCP hooks; installed Codex, Gemini, and Cursor wrappers produce HARD destructive-action DENY and journal-verify OK in fixture homes [MEASURED]. Assurance remains GATE on mapped paths, not CONFINE.",
       "tags": [
         "MEASURED"
       ],
-      "pointer": "tools/scripts/install_kernel_smoke.sh + crates/lia-adapters/src/codex.rs + crates/lia-adapters/src/mcp_stdio.rs"
+      "pointer": "crates/lia-cli/tests/install_kernel_smoke.rs + crates/lia-adapters/src/install.rs"
+    },
+    {
+      "text": "M4 local trust-boundary suite [MEASURED]: typed process contract requires a signed pre-action declaration and contract-scoped terminal manifest; Gemini/Cursor mapped destructive actions deny with verifiable receipts; digest-pinned cosign/client fixtures prove delegation and timeout behavior; official-origin registry cache replay requires external body+metadata pins and freshness. This is local fixture/conformance evidence, not a live Gemini/Cursor cloud-agent, Sigstore public-log, or registry-network measurement.",
+      "tags": [
+        "MEASURED"
+      ],
+      "pointer": "crates/lia-cli/tests/m4_process_adapters_public_registry.rs + conformance/SUITE.json + crates/lia-adapters/src/process_contract.rs"
     }
   ]
 }

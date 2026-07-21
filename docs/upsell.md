@@ -7,7 +7,7 @@ actions when the corresponding gate is wired:
 - Completing work without required evidence
 - Out-of-scope filesystem writes/deletes
 - Irreversible shell (`rm -rf /`, force-push, pipe-to-shell, …)
-- Hallucinated dependencies against a registry snapshot
+- Hallucinated dependencies against a policy snapshot or supplied official-registry evidence
 - Secret material in shareable outputs
 - Journal tamper probes (chain breaks)
 
@@ -15,7 +15,7 @@ actions when the corresponding gate is wired:
 They are **not** on Harbor TerminusLia (TB2/Claw) until that adapter is
 extended — see `docs/claims.json` honesty entries.
 
-**Not claimed in v1:** complete mediation / CONFINE for Claude Code, Codex, or
+**Not claimed in v1:** complete mediation / CONFINE for any hook/MCP adapter or
 generic wrap; network egress confinement; that trust automatically raises SWE
 pass-rate.
 
@@ -26,10 +26,10 @@ pass-rate.
 | Complete mediation | GATE only (hooks/MCP) | Process supervisor + CONFINE |
 | Network egress PREVENT | capability key false | Host/network sandbox |
 | Credential broker | missing | Broker product surface |
-| Live registry dependency fetch | fixture only | Registry integration |
+| Registry-signed/transparency authenticity | bounded official HTTPS observation only | Registry transparency/signature integration |
 | Claim extraction from free text | closed (LIA) | Harness reasoning layer |
 | Auto-repair after gate fail | closed (LIA) | Harness recovery |
 | Planning / multi-agent recovery | closed (LIA) | Harness / Canvas |
-| Gemini / Cursor adapters | POST-L6 | Adapter pack |
+| Complete Gemini / Cursor mediation | mapped native hooks shipped locally | Confined process/tool supervisor |
 
 See `docs/guarantee-matrix.md` and `bench/assurance_truth.json`.
