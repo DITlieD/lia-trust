@@ -66,6 +66,9 @@ cargo build -p lia-cli --release
 ./target/release/lia install --apply-live
 ```
 
+A prebuilt linux x86_64 binary ships with each
+[release](https://github.com/DITlieD/lia-trust/releases) (checksums included).
+
 What install does:
 
 | Target | Wiring |
