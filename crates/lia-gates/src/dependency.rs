@@ -22,8 +22,7 @@ pub fn check_dependency_reality(
 
     if looks_typosquat(package, &config.registry) {
         return Ok(make_outcome(
-            "dependency-reality",
-            request.action_id,
+            request,
             Verdict::Deny,
             "DEP_TYPOSQUAT",
             RiskTier::Security,
@@ -35,8 +34,7 @@ pub fn check_dependency_reality(
 
     let Some(versions) = config.registry.get(package) else {
         return Ok(make_outcome(
-            "dependency-reality",
-            request.action_id,
+            request,
             Verdict::Deny,
             "DEP_NOT_FOUND",
             RiskTier::Security,
@@ -49,8 +47,7 @@ pub fn check_dependency_reality(
     if let Some(ver) = version {
         if !versions.iter().any(|v| v == ver) {
             return Ok(make_outcome(
-                "dependency-reality",
-                request.action_id,
+                request,
                 Verdict::Deny,
                 "DEP_VERSION_MISSING",
                 RiskTier::Security,
@@ -62,8 +59,7 @@ pub fn check_dependency_reality(
     }
 
     Ok(make_outcome(
-        "dependency-reality",
-        request.action_id,
+        request,
         Verdict::Allow,
         "GATE_ALLOW",
         RiskTier::Security,

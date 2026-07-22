@@ -36,8 +36,7 @@ pub fn check_secret_output(request: &GateRequest) -> Result<GateOutcome, GateErr
 
     if !hits.is_empty() {
         let mut out = make_outcome(
-            "secret-output",
-            request.action_id,
+            request,
             Verdict::Deny,
             "SECRET_IN_OUTPUT",
             RiskTier::Secret,
@@ -50,8 +49,7 @@ pub fn check_secret_output(request: &GateRequest) -> Result<GateOutcome, GateErr
     }
 
     let mut out = make_outcome(
-        "secret-output",
-        request.action_id,
+        request,
         Verdict::Allow,
         "GATE_ALLOW",
         RiskTier::Secret,
@@ -89,7 +87,10 @@ fn detect_secrets(text: &str) -> Vec<String> {
         // Stripe live secret / restricted keys
         (r"\b[sr]k_live_[A-Za-z0-9]{20,}\b", "stripe_key"),
         // JWT (three base64url segments, header begins eyJ = {"…)
-        (r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}", "jwt"),
+        (
+            r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}",
+            "jwt",
+        ),
         // credentials embedded in a URI (scheme://user:pass@host)
         (r"://[^/\s:@]+:[^/\s@]+@", "uri_credentials"),
     ];
@@ -115,9 +116,7 @@ mod tests {
             action_id: Uuid::new_v4(),
             kind: None,
             payload: crate::GatePayload {
-                text: Some(
-                    "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD".into(),
-                ),
+                text: Some("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD".into()),
                 ..crate::GatePayload::default()
             },
         };
@@ -138,8 +137,16 @@ mod tests {
             concat!("AS", "IAY34FZKBOKMUTVV7A"),
             concat!("gh", "o_", "16C7e42F292c6912E7710c838347Ae178B4a"),
             concat!("gh", "u_", "16C7e42F292c6912E7710c838347Ae178B4a"),
-            concat!("github", "_pat_", "11ABCDEFG0abcdefghijkl_MNOPQRSTUVWXYZ0123456789"),
-            concat!("eyJhbGciOiJIUzI1NiJ9", ".eyJzdWIiOiIxMjM0NTY3ODkwIn0", ".abcDEFghiJKLmnop"),
+            concat!(
+                "github",
+                "_pat_",
+                "11ABCDEFG0abcdefghijkl_MNOPQRSTUVWXYZ0123456789"
+            ),
+            concat!(
+                "eyJhbGciOiJIUzI1NiJ9",
+                ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+                ".abcDEFghiJKLmnop"
+            ),
             "postgres://admin:S3cr3tPass@db.internal/prod",
             concat!("sk", "_live_", "abcdefghijklmnopqrstuvwx"),
         ] {

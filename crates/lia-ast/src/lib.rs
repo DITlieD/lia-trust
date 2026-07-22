@@ -99,7 +99,11 @@ pub struct ScanOptions {
     pub language: Option<Language>,
 }
 
-pub fn scan_source(source: &str, lang: Language, opts: &ScanOptions) -> Result<AstReport, AstError> {
+pub fn scan_source(
+    source: &str,
+    lang: Language,
+    opts: &ScanOptions,
+) -> Result<AstReport, AstError> {
     let mut hits = Vec::new();
     match lang {
         Language::Python => scan_python(source, opts, &mut hits)?,
@@ -134,10 +138,7 @@ pub fn scan_diff(diff: &str, opts: &ScanOptions) -> Result<AstReport, AstError> 
     Ok(finalize(hits))
 }
 
-pub fn ast_report_to_outcome(
-    report: &AstReport,
-    action_id: uuid::Uuid,
-) -> lia_gates::GateOutcome {
+pub fn ast_report_to_outcome(report: &AstReport, action_id: uuid::Uuid) -> lia_gates::GateOutcome {
     let evidence = serde_json::json!({
         "hits": report.hits,
         "grammar_pins": report.grammar_pins,
@@ -176,9 +177,7 @@ fn finalize(mut hits: Vec<AstHit>) -> AstReport {
             .then(a.line.cmp(&b.line))
             .then(a.excerpt.cmp(&b.excerpt))
     });
-    hits.dedup_by(|a, b| {
-        a.predicate == b.predicate && a.line == b.line && a.excerpt == b.excerpt
-    });
+    hits.dedup_by(|a, b| a.predicate == b.predicate && a.line == b.line && a.excerpt == b.excerpt);
     let reason_code = hits
         .first()
         .map(|h| h.predicate.reason_code().to_string())
@@ -247,16 +246,16 @@ fn walk_python(node: Node, src: &[u8], opts: &ScanOptions, hits: &mut Vec<AstHit
     if kind == "call" {
         let callee = call_callee_python(node, src);
         let line = node.start_position().row + 1;
-        if callee.ends_with("execute") || callee.ends_with("executemany") {
-            if looks_sql_interpolated(node, src) {
-                hits.push(AstHit {
-                    predicate: Predicate::SqlInterp,
-                    language: Language::Python,
-                    line,
-                    excerpt: trim_excerpt(&text),
-                    detail: "SQL executed with interpolated string".into(),
-                });
-            }
+        if (callee.ends_with("execute") || callee.ends_with("executemany"))
+            && looks_sql_interpolated(node, src)
+        {
+            hits.push(AstHit {
+                predicate: Predicate::SqlInterp,
+                language: Language::Python,
+                line,
+                excerpt: trim_excerpt(&text),
+                detail: "SQL executed with interpolated string".into(),
+            });
         }
         if callee == "eval" || callee == "exec" {
             hits.push(AstHit {
@@ -285,18 +284,17 @@ fn walk_python(node: Node, src: &[u8], opts: &ScanOptions, hits: &mut Vec<AstHit
                 detail: "yaml.load without SafeLoader".into(),
             });
         }
-        if text.contains("os.system")
-            || (text.contains("subprocess") && text.contains("shell=True"))
+        if (text.contains("os.system")
+            || (text.contains("subprocess") && text.contains("shell=True")))
+            && !arg_is_string_literal(node, src)
         {
-            if !arg_is_string_literal(node, src) {
-                hits.push(AstHit {
-                    predicate: Predicate::UntrustedCmd,
-                    language: Language::Python,
-                    line,
-                    excerpt: trim_excerpt(&text),
-                    detail: "untrusted data flows into command execution".into(),
-                });
-            }
+            hits.push(AstHit {
+                predicate: Predicate::UntrustedCmd,
+                language: Language::Python,
+                line,
+                excerpt: trim_excerpt(&text),
+                detail: "untrusted data flows into command execution".into(),
+            });
         }
     }
 

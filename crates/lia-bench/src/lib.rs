@@ -16,8 +16,9 @@ pub use metrics::{
     BOOTSTRAP_ITERS, BOOTSTRAP_SEED, FALSE_BLOCK_BOUND,
 };
 pub use run::{
-    probe_bridge, run_arm, verify_bench_bundle, write_signed_bench_bundle, BenchError, BenchOptions,
-    BenchResultBundle, Harness, AGENT_MODE_LIVE, AGENT_MODE_RECORDED, BENCH_RESULT_VERSION,
+    probe_bridge, run_arm, verify_bench_bundle, write_signed_bench_bundle, BenchError,
+    BenchOptions, BenchResultBundle, Harness, AGENT_MODE_LIVE, AGENT_MODE_RECORDED,
+    BENCH_RESULT_VERSION,
 };
 
 #[cfg(test)]

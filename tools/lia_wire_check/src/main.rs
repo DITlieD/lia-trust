@@ -50,7 +50,13 @@ fn run() -> Result<i32> {
     } else if !args.files.is_empty() {
         args.files
             .iter()
-            .map(|f| if f.is_absolute() { f.clone() } else { root.join(f) })
+            .map(|f| {
+                if f.is_absolute() {
+                    f.clone()
+                } else {
+                    root.join(f)
+                }
+            })
             .collect()
     } else {
         bail!("provide --changeset <diff|path|git:HEAD> or --files a.rs,b.rs");

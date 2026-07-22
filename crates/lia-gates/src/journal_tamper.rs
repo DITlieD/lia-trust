@@ -32,8 +32,7 @@ pub fn check_journal_tamper(
 
     if rows.is_empty() {
         return Ok(make_outcome(
-            "journal-tamper",
-            request.action_id,
+            request,
             Verdict::Deny,
             "JOURNAL_TAMPER_DETECTED",
             RiskTier::Security,
@@ -48,8 +47,7 @@ pub fn check_journal_tamper(
     for (i, row) in rows.iter().enumerate() {
         if row.run_id != expected_run {
             return Ok(make_outcome(
-                "journal-tamper",
-                request.action_id,
+                request,
                 Verdict::Deny,
                 "JOURNAL_CROSS_SESSION",
                 RiskTier::Security,
@@ -64,8 +62,7 @@ pub fn check_journal_tamper(
         if let Some(rr) = row.receipt_run_id {
             if rr != expected_run {
                 return Ok(make_outcome(
-                    "journal-tamper",
-                    request.action_id,
+                    request,
                     Verdict::Deny,
                     "JOURNAL_CROSS_SESSION",
                     RiskTier::Security,
@@ -78,8 +75,7 @@ pub fn check_journal_tamper(
         if i > 0 {
             if row.seq != expected_seq {
                 return Ok(make_outcome(
-                    "journal-tamper",
-                    request.action_id,
+                    request,
                     Verdict::Deny,
                     "JOURNAL_REORDER",
                     RiskTier::Security,
@@ -93,8 +89,7 @@ pub fn check_journal_tamper(
             }
             if row.prev_hash != prev {
                 return Ok(make_outcome(
-                    "journal-tamper",
-                    request.action_id,
+                    request,
                     Verdict::Deny,
                     "JOURNAL_TAMPER_DETECTED",
                     RiskTier::Security,
@@ -114,8 +109,7 @@ pub fn check_journal_tamper(
     sorted.dedup();
     if sorted.len() != hashes.len() {
         return Ok(make_outcome(
-            "journal-tamper",
-            request.action_id,
+            request,
             Verdict::Deny,
             "JOURNAL_TAMPER_DETECTED",
             RiskTier::Security,
@@ -126,8 +120,7 @@ pub fn check_journal_tamper(
     }
 
     Ok(make_outcome(
-        "journal-tamper",
-        request.action_id,
+        request,
         Verdict::Allow,
         "GATE_ALLOW",
         RiskTier::Security,

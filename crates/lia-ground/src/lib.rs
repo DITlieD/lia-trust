@@ -185,9 +185,7 @@ pub fn verify_claim_with_id(
     Ok(result)
 }
 
-pub fn ground_result_to_outcome(
-    result: &GroundResult,
-) -> lia_gates::GateOutcome {
+pub fn ground_result_to_outcome(result: &GroundResult) -> lia_gates::GateOutcome {
     lia_gates::GateOutcome {
         gate_id: GROUND_GATE_ID.to_string(),
         action_id: result.action_id,
@@ -484,8 +482,7 @@ fn check_source_supports(
                 Verdict::Unsupported,
                 "GROUND_SOURCE_TOKEN_ONLY",
                 Some(
-                    "token-only containment is banned; span + closed-set citation required"
-                        .into(),
+                    "token-only containment is banned; span + closed-set citation required".into(),
                 ),
                 None,
                 evidence,
@@ -555,7 +552,9 @@ fn check_source_supports(
         bound_spans.push(actual);
     }
 
-    let supported = bound_spans.iter().any(|span| span_contains_claim(span, claim_text));
+    let supported = bound_spans
+        .iter()
+        .any(|span| span_contains_claim(span, claim_text));
     if supported {
         Ok(make_result(
             "source_supports",

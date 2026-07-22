@@ -167,10 +167,7 @@ pub fn detect(exchange: &Exchange) -> Result<SycoReport, SycoError> {
                         detector: "stability_across_framing".into(),
                         flagged: true,
                         reason_code: "SYCO_UNSTABLE_FRAMING".into(),
-                        detail: format!(
-                            "frame {} flipped agreement/support verdict",
-                            v.frame_id
-                        ),
+                        detail: format!("frame {} flipped agreement/support verdict", v.frame_id),
                     });
                 }
             }

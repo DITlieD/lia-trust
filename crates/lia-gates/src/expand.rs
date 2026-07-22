@@ -459,10 +459,7 @@ EOF"#
 
     #[test]
     fn unquoted_heredoc_still_rejects_substitution() {
-        assert!(reject_command_substitution(
-            "cat <<EOF\necho $(whoami)\nEOF"
-        )
-        .is_err());
+        assert!(reject_command_substitution("cat <<EOF\necho $(whoami)\nEOF").is_err());
     }
 
     #[test]

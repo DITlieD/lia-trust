@@ -123,15 +123,13 @@ fn lint_json_value(path: &Path, v: &serde_json::Value, findings: &mut Vec<Claims
             }
         }
         // any string leaf can carry a claim ("summary":"99% catch rate"), not only claims[].text
-        serde_json::Value::String(s) => {
-            if looks_like_rate_claim(s) && !is_tagged(s) {
-                findings.push(ClaimsLintFinding {
-                    path: path.display().to_string(),
-                    line: 0,
-                    excerpt: s.chars().take(160).collect(),
-                    reason: "JSON string carries an untagged numeric/superlative claim".into(),
-                });
-            }
+        serde_json::Value::String(s) if looks_like_rate_claim(s) && !is_tagged(s) => {
+            findings.push(ClaimsLintFinding {
+                path: path.display().to_string(),
+                line: 0,
+                excerpt: s.chars().take(160).collect(),
+                reason: "JSON string carries an untagged numeric/superlative claim".into(),
+            });
         }
         _ => {}
     }

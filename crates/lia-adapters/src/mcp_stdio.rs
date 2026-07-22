@@ -39,9 +39,10 @@ pub fn read_framed_message(reader: &mut impl BufRead) -> Result<Option<String>, 
             }
         };
         if name.eq_ignore_ascii_case("Content-Length") {
-            content_length = Some(value.parse().map_err(|e| {
-                AdapterError::Invalid(format!("mcp Content-Length parse: {e}"))
-            })?);
+            content_length =
+                Some(value.parse().map_err(|e| {
+                    AdapterError::Invalid(format!("mcp Content-Length parse: {e}"))
+                })?);
         }
         // Content-Type and other headers ignored.
     }
@@ -52,9 +53,9 @@ pub fn read_framed_message(reader: &mut impl BufRead) -> Result<Option<String>, 
     reader
         .read_exact(&mut buf)
         .map_err(|e| AdapterError::Invalid(format!("mcp stdio read body ({len} bytes): {e}")))?;
-    String::from_utf8(buf).map(Some).map_err(|e| {
-        AdapterError::Invalid(format!("mcp stdio body not utf-8: {e}"))
-    })
+    String::from_utf8(buf)
+        .map(Some)
+        .map_err(|e| AdapterError::Invalid(format!("mcp stdio body not utf-8: {e}")))
 }
 
 /// Write one Content-Length framed JSON-RPC message to `writer`.

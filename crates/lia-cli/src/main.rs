@@ -528,6 +528,113 @@ fn main() -> ExitCode {
     }
 }
 
+struct InstallRequestArgs {
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
+    dry_run: bool,
+    apply_live: bool,
+    allowed_root: Vec<PathBuf>,
+}
+
+struct RegistryCommandArgs {
+    ecosystem: String,
+    package: String,
+    version: Option<String>,
+    cache_dir: PathBuf,
+    offline: bool,
+    http_client: PathBuf,
+    expected_http_client_sha256: Option<String>,
+    timeout_seconds: u64,
+    base_url: Option<String>,
+    expected_response_sha256: Option<String>,
+    expected_cache_manifest_sha256: Option<String>,
+    max_cache_age_seconds: u64,
+}
+
+struct GroundCommandArgs {
+    claim: Option<String>,
+    claim_file: Option<PathBuf>,
+    context: Option<PathBuf>,
+    config: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    action_id: Option<Uuid>,
+}
+
+struct AstGateCommandArgs {
+    path: Option<PathBuf>,
+    diff: Option<PathBuf>,
+    diff_text: Option<String>,
+    language: Option<String>,
+    manifest: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    action_id: Option<Uuid>,
+}
+
+struct WrapCommandArgs {
+    repo: PathBuf,
+    evidence_dir: PathBuf,
+    config: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    run_id: Option<Uuid>,
+    watch: bool,
+    timeout_seconds: u64,
+    linux_confine: bool,
+    unshare_bin: Option<PathBuf>,
+    expected_unshare_sha256: Option<String>,
+    credential_args: Vec<String>,
+    credential_ttl_seconds: u64,
+    agent: Vec<String>,
+}
+
+struct McpCommandArgs {
+    config: Option<PathBuf>,
+    journal: Option<PathBuf>,
+    secret_key_hex: Option<String>,
+    key_id: String,
+    run_id: Option<Uuid>,
+    policy: Option<PathBuf>,
+    bundle: Option<PathBuf>,
+    probe: Option<PathBuf>,
+    adapter: Option<String>,
+    request: Option<String>,
+}
+
+struct BenchCommandArgs {
+    harness: String,
+    arm: String,
+    corpus: PathBuf,
+    out: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    bridge_url: String,
+    force_recorded: bool,
+    require_live: bool,
+    model: Option<String>,
+}
+
+struct VerifyRunCommandArgs {
+    base: String,
+    head: String,
+    evidence: PathBuf,
+    repo: Option<PathBuf>,
+    out: PathBuf,
+    secret_key_hex: String,
+    key_id: String,
+    verifier_secret_key_hex: Option<String>,
+    verifier_key_id: String,
+}
+
 fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
@@ -650,7 +757,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             expected_response_sha256,
             expected_cache_manifest_sha256,
             max_cache_age_seconds,
-        } => run_registry_evidence(
+        } => run_registry_evidence(RegistryCommandArgs {
             ecosystem,
             package,
             version,
@@ -663,7 +770,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             expected_response_sha256,
             expected_cache_manifest_sha256,
             max_cache_age_seconds,
-        ),
+        }),
         Commands::Gate {
             rules,
             evidence,
@@ -814,7 +921,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
             action_id,
-        } => run_ground(
+        } => run_ground(GroundCommandArgs {
             claim,
             claim_file,
             context,
@@ -824,7 +931,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
             action_id,
-        ),
+        }),
         Commands::Syco {
             exchange,
             exchange_file,
@@ -853,7 +960,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
             action_id,
-        } => run_ast_gate(
+        } => run_ast_gate(AstGateCommandArgs {
             path,
             diff,
             diff_text,
@@ -864,7 +971,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             run_id,
             action_id,
-        ),
+        }),
         Commands::Taint { graph, graph_file } => run_taint(graph, graph_file),
         Commands::Wrap {
             repo,
@@ -882,22 +989,22 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             credentials,
             credential_ttl_seconds,
             agent,
-        } => run_wrap(
+        } => run_wrap(WrapCommandArgs {
             repo,
             evidence_dir,
             config,
             secret_key_hex,
             key_id,
             run_id,
-            watch && !no_watch,
+            watch: watch && !no_watch,
             timeout_seconds,
             linux_confine,
             unshare_bin,
             expected_unshare_sha256,
-            credentials,
+            credential_args: credentials,
             credential_ttl_seconds,
             agent,
-        ),
+        }),
         Commands::CredentialRead { name } => {
             let secret = credential_read(&name)?;
             io::stdout().write_all(secret.as_slice())?;
@@ -938,7 +1045,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             force_recorded,
             require_live,
             model,
-        } => run_bench(
+        } => run_bench(BenchCommandArgs {
             harness,
             arm,
             corpus,
@@ -949,7 +1056,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             force_recorded,
             require_live,
             model,
-        ),
+        }),
         Commands::ClaimsLint { root, json } => run_claims_lint(root, json),
         Commands::VerifyRun {
             base,
@@ -961,7 +1068,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             verifier_secret_key_hex,
             verifier_key_id,
-        } => run_verify_run(
+        } => run_verify_run(VerifyRunCommandArgs {
             base,
             head,
             evidence,
@@ -971,7 +1078,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             key_id,
             verifier_secret_key_hex,
             verifier_key_id,
-        ),
+        }),
         Commands::Conform {
             suite,
             adapter,
@@ -988,7 +1095,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             probe,
             adapter,
             request,
-        } => run_mcp(
+        } => run_mcp(McpCommandArgs {
             config,
             journal,
             secret_key_hex,
@@ -999,7 +1106,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             probe,
             adapter,
             request,
-        ),
+        }),
         Commands::Install {
             lia_home,
             lia_bin,
@@ -1012,15 +1119,17 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             allowed_root,
             json,
         } => run_install(
-            lia_home,
-            lia_bin,
-            claude_home,
-            codex_home,
-            gemini_home,
-            cursor_home,
-            dry_run,
-            apply_live,
-            allowed_root,
+            InstallRequestArgs {
+                lia_home,
+                lia_bin,
+                claude_home,
+                codex_home,
+                gemini_home,
+                cursor_home,
+                dry_run,
+                apply_live,
+                allowed_root,
+            },
             json,
         ),
         Commands::Status {
@@ -1051,14 +1160,17 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             apply_live,
             json,
         } => run_uninstall(
-            lia_home,
-            lia_bin,
-            claude_home,
-            codex_home,
-            gemini_home,
-            cursor_home,
-            dry_run,
-            apply_live,
+            InstallRequestArgs {
+                lia_home,
+                lia_bin,
+                claude_home,
+                codex_home,
+                gemini_home,
+                cursor_home,
+                dry_run,
+                apply_live,
+                allowed_root: Vec::new(),
+            },
             json,
         ),
     }
@@ -1075,16 +1187,19 @@ fn resolve_lia_bin(explicit: Option<PathBuf>) -> Result<PathBuf, Box<dyn std::er
 }
 
 fn build_install_request(
-    lia_home: Option<PathBuf>,
-    lia_bin: Option<PathBuf>,
-    claude_home: Option<PathBuf>,
-    codex_home: Option<PathBuf>,
-    gemini_home: Option<PathBuf>,
-    cursor_home: Option<PathBuf>,
-    dry_run: bool,
-    apply_live: bool,
-    allowed_root: Vec<PathBuf>,
+    args: InstallRequestArgs,
 ) -> Result<InstallRequest, Box<dyn std::error::Error>> {
+    let InstallRequestArgs {
+        lia_home,
+        lia_bin,
+        claude_home,
+        codex_home,
+        gemini_home,
+        cursor_home,
+        dry_run,
+        apply_live,
+        allowed_root,
+    } = args;
     let claude_home = claude_home.unwrap_or_else(default_claude_home);
     let codex_home = codex_home.unwrap_or_else(default_codex_home);
     let gemini_home = gemini_home.unwrap_or_else(default_gemini_home);
@@ -1148,28 +1263,10 @@ fn emit_install_report(
 }
 
 fn run_install(
-    lia_home: Option<PathBuf>,
-    lia_bin: Option<PathBuf>,
-    claude_home: Option<PathBuf>,
-    codex_home: Option<PathBuf>,
-    gemini_home: Option<PathBuf>,
-    cursor_home: Option<PathBuf>,
-    dry_run: bool,
-    apply_live: bool,
-    allowed_root: Vec<PathBuf>,
+    args: InstallRequestArgs,
     json: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    let req = build_install_request(
-        lia_home,
-        lia_bin,
-        claude_home,
-        codex_home,
-        gemini_home,
-        cursor_home,
-        dry_run,
-        apply_live,
-        allowed_root,
-    )?;
+    let req = build_install_request(args)?;
     let report = install_kernel(&req).map_err(|e| e.to_string())?;
     emit_install_report(&report, json)
 }
@@ -1199,27 +1296,10 @@ fn run_install_status(
 }
 
 fn run_uninstall(
-    lia_home: Option<PathBuf>,
-    lia_bin: Option<PathBuf>,
-    claude_home: Option<PathBuf>,
-    codex_home: Option<PathBuf>,
-    gemini_home: Option<PathBuf>,
-    cursor_home: Option<PathBuf>,
-    dry_run: bool,
-    apply_live: bool,
+    args: InstallRequestArgs,
     json: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    let req = build_install_request(
-        lia_home,
-        lia_bin,
-        claude_home,
-        codex_home,
-        gemini_home,
-        cursor_home,
-        dry_run,
-        apply_live,
-        vec![],
-    )?;
+    let req = build_install_request(args)?;
     let report = uninstall_kernel(&req).map_err(|e| e.to_string())?;
     emit_install_report(&report, json)
 }
@@ -1332,17 +1412,18 @@ fn dispatch_gate_request(
     }
 }
 
-fn run_ground(
-    claim: Option<String>,
-    claim_file: Option<PathBuf>,
-    context: Option<PathBuf>,
-    config: Option<PathBuf>,
-    journal: Option<PathBuf>,
-    secret_key_hex: Option<String>,
-    key_id: String,
-    run_id: Option<Uuid>,
-    action_id: Option<Uuid>,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_ground(args: GroundCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let GroundCommandArgs {
+        claim,
+        claim_file,
+        context,
+        config,
+        journal,
+        secret_key_hex,
+        key_id,
+        run_id,
+        action_id,
+    } = args;
     let claim = match (claim, claim_file) {
         (Some(s), _) => parse_claim(&s)?,
         (None, Some(p)) => load_claim(p)?,
@@ -1395,18 +1476,19 @@ fn run_syco(
     emit_l4_outcome(&outcome, &report, journal, secret_key_hex, key_id, run_id)
 }
 
-fn run_ast_gate(
-    path: Option<PathBuf>,
-    diff: Option<PathBuf>,
-    diff_text: Option<String>,
-    language: Option<String>,
-    manifest: Option<PathBuf>,
-    journal: Option<PathBuf>,
-    secret_key_hex: Option<String>,
-    key_id: String,
-    run_id: Option<Uuid>,
-    action_id: Option<Uuid>,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_ast_gate(args: AstGateCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let AstGateCommandArgs {
+        path,
+        diff,
+        diff_text,
+        language,
+        manifest,
+        journal,
+        secret_key_hex,
+        key_id,
+        run_id,
+        action_id,
+    } = args;
     let mut opts = ScanOptions::default();
     if let Some(lang) = language {
         opts.language = Some(parse_language(&lang)?);
@@ -1452,22 +1534,23 @@ fn run_taint(
     }
 }
 
-fn run_wrap(
-    repo: PathBuf,
-    evidence_dir: PathBuf,
-    config: PathBuf,
-    secret_key_hex: String,
-    key_id: String,
-    run_id: Option<Uuid>,
-    watch: bool,
-    timeout_seconds: u64,
-    linux_confine: bool,
-    unshare_bin: Option<PathBuf>,
-    expected_unshare_sha256: Option<String>,
-    credential_args: Vec<String>,
-    credential_ttl_seconds: u64,
-    agent: Vec<String>,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_wrap(args: WrapCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let WrapCommandArgs {
+        repo,
+        evidence_dir,
+        config,
+        secret_key_hex,
+        key_id,
+        run_id,
+        watch,
+        timeout_seconds,
+        linux_confine,
+        unshare_bin,
+        expected_unshare_sha256,
+        credential_args,
+        credential_ttl_seconds,
+        agent,
+    } = args;
     let cfg = load_gate_config(&config)?;
     let run_id = run_id.unwrap_or_else(Uuid::new_v4);
     if !linux_confine
@@ -1677,21 +1760,23 @@ fn run_public_verify(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_registry_evidence(
-    ecosystem: String,
-    package: String,
-    version: Option<String>,
-    cache_dir: PathBuf,
-    offline: bool,
-    http_client: PathBuf,
-    expected_http_client_sha256: Option<String>,
-    timeout_seconds: u64,
-    base_url: Option<String>,
-    expected_response_sha256: Option<String>,
-    expected_cache_manifest_sha256: Option<String>,
-    max_cache_age_seconds: u64,
+    args: RegistryCommandArgs,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let RegistryCommandArgs {
+        ecosystem,
+        package,
+        version,
+        cache_dir,
+        offline,
+        http_client,
+        expected_http_client_sha256,
+        timeout_seconds,
+        base_url,
+        expected_response_sha256,
+        expected_cache_manifest_sha256,
+        max_cache_age_seconds,
+    } = args;
     let report = collect_registry_evidence(&RegistryEvidenceOptions {
         ecosystem: RegistryEcosystem::parse(&ecosystem)?,
         package,
@@ -1714,18 +1799,19 @@ fn run_registry_evidence(
     })
 }
 
-fn run_mcp(
-    config: Option<PathBuf>,
-    journal: Option<PathBuf>,
-    secret_key_hex: Option<String>,
-    key_id: String,
-    run_id: Option<Uuid>,
-    policy: Option<PathBuf>,
-    bundle: Option<PathBuf>,
-    probe: Option<PathBuf>,
-    adapter: Option<String>,
-    request: Option<String>,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_mcp(args: McpCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let McpCommandArgs {
+        config,
+        journal,
+        secret_key_hex,
+        key_id,
+        run_id,
+        policy,
+        bundle,
+        probe,
+        adapter,
+        request,
+    } = args;
     let cfg = match config {
         Some(p) => load_gate_config(p)?,
         None => GateConfig {
@@ -1911,18 +1997,19 @@ fn emit_verify_report(
     Ok(())
 }
 
-fn run_bench(
-    harness: String,
-    arm: String,
-    corpus: PathBuf,
-    out: PathBuf,
-    secret_key_hex: String,
-    key_id: String,
-    bridge_url: String,
-    force_recorded: bool,
-    require_live: bool,
-    model: Option<String>,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_bench(args: BenchCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let BenchCommandArgs {
+        harness,
+        arm,
+        corpus,
+        out,
+        secret_key_hex,
+        key_id,
+        bridge_url,
+        force_recorded,
+        require_live,
+        model,
+    } = args;
     let harness = Harness::parse(&harness)?;
     let arm = Arm::parse(&arm)?;
     if force_recorded && require_live {
@@ -1987,17 +2074,18 @@ fn run_claims_lint(root: PathBuf, json: bool) -> Result<ExitCode, Box<dyn std::e
     }
 }
 
-fn run_verify_run(
-    base: String,
-    head: String,
-    evidence: PathBuf,
-    repo: Option<PathBuf>,
-    out: PathBuf,
-    secret_key_hex: String,
-    key_id: String,
-    verifier_secret_key_hex: Option<String>,
-    verifier_key_id: String,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
+fn run_verify_run(args: VerifyRunCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let VerifyRunCommandArgs {
+        base,
+        head,
+        evidence,
+        repo,
+        out,
+        secret_key_hex,
+        key_id,
+        verifier_secret_key_hex,
+        verifier_key_id,
+    } = args;
     let repo = repo.unwrap_or_else(|| PathBuf::from("."));
     let journal_id = SigningIdentity::from_secret_key_hex(key_id, &secret_key_hex)?;
     // Independent verifier entropy, never derived from the journal secret (see fixture-bundle).

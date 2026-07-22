@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
+mod cleanup;
 mod dependency;
 mod evidence;
 mod expand;
@@ -304,8 +305,7 @@ pub(crate) fn blake3_hex(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn make_outcome(
-    gate_id: &str,
-    action_id: Uuid,
+    request: &GateRequest,
     verdict: Verdict,
     reason_code: &str,
     risk_tier: RiskTier,
@@ -314,8 +314,8 @@ pub(crate) fn make_outcome(
     evidence: &serde_json::Value,
 ) -> GateOutcome {
     GateOutcome {
-        gate_id: gate_id.to_string(),
-        action_id,
+        gate_id: request.gate_id.clone(),
+        action_id: request.action_id,
         verdict,
         reason_code: reason_code.to_string(),
         risk_tier,

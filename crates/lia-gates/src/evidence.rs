@@ -4,16 +4,8 @@ use serde_json::json;
 use crate::{make_outcome, GateError, GateOutcome, GateRequest};
 
 pub fn check_evidence_completeness(request: &GateRequest) -> Result<GateOutcome, GateError> {
-    let modified = request
-        .payload
-        .modified_paths
-        .clone()
-        .unwrap_or_default();
-    let new_deps = request
-        .payload
-        .new_dependencies
-        .clone()
-        .unwrap_or_default();
+    let modified = request.payload.modified_paths.clone().unwrap_or_default();
+    let new_deps = request.payload.new_dependencies.clone().unwrap_or_default();
     let has_test = request.payload.has_test_result.unwrap_or(false);
     let unsupported = request.payload.test_unsupported.unwrap_or(false);
     let deps_ok = request.payload.deps_registry_evidence.unwrap_or(false);
@@ -28,8 +20,7 @@ pub fn check_evidence_completeness(request: &GateRequest) -> Result<GateOutcome,
 
     if !modified.is_empty() && !has_test && !unsupported {
         return Ok(make_outcome(
-            "evidence-completeness",
-            request.action_id,
+            request,
             Verdict::Incomplete,
             "EVIDENCE_INCOMPLETE",
             RiskTier::Security,
@@ -41,8 +32,7 @@ pub fn check_evidence_completeness(request: &GateRequest) -> Result<GateOutcome,
 
     if !new_deps.is_empty() && !deps_ok {
         return Ok(make_outcome(
-            "evidence-completeness",
-            request.action_id,
+            request,
             Verdict::Incomplete,
             "EVIDENCE_INCOMPLETE",
             RiskTier::Security,
@@ -53,8 +43,7 @@ pub fn check_evidence_completeness(request: &GateRequest) -> Result<GateOutcome,
     }
 
     Ok(make_outcome(
-        "evidence-completeness",
-        request.action_id,
+        request,
         Verdict::Allow,
         "GATE_ALLOW",
         RiskTier::Security,

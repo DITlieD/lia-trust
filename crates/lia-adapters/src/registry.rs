@@ -177,8 +177,7 @@ pub fn collect_registry_evidence(
             "REGISTRY_FETCH_TIMEOUT",
             "registry client exceeded its deadline",
             fetch.http_status,
-            cache_body_path,
-            cache_metadata_path,
+            (&cache_body_path, &cache_metadata_path),
         ));
     }
     if fetch.exit_code != Some(0) {
@@ -189,8 +188,7 @@ pub fn collect_registry_evidence(
             "REGISTRY_FETCH_FAILED",
             bounded_detail(&fetch.stderr),
             fetch.http_status,
-            cache_body_path,
-            cache_metadata_path,
+            (&cache_body_path, &cache_metadata_path),
         ));
     }
 
@@ -207,8 +205,7 @@ pub fn collect_registry_evidence(
                 MAX_REGISTRY_BODY_BYTES
             ),
             fetch.http_status,
-            cache_body_path,
-            cache_metadata_path,
+            (&cache_body_path, &cache_metadata_path),
         ));
     }
     let body = fs::read(&temp_path)?;
@@ -232,17 +229,19 @@ pub fn collect_registry_evidence(
     let cache_manifest_sha256 = sha256(&fs::read(&cache_metadata_path)?);
     build_report(
         options,
-        source_url,
-        "live",
-        fetched_at,
-        fetch.http_status,
-        http_client_sha256,
-        response_sha256,
-        body,
-        None,
-        cache_manifest_sha256,
-        cache_body_path,
-        cache_metadata_path,
+        RegistryReportInput {
+            source_url,
+            source: "live".into(),
+            fetched_at,
+            http_status: fetch.http_status,
+            http_client_sha256,
+            response_sha256,
+            body,
+            cache_age_seconds: None,
+            cache_manifest_sha256,
+            cache_body_path,
+            cache_metadata_path,
+        },
     )
 }
 
@@ -373,8 +372,7 @@ fn from_cache(
             "REGISTRY_CACHE_DIGEST_UNPINNED",
             "offline cache acceptance requires an externally stored expected response digest",
             0,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     };
     let Some(expected_cache_manifest_sha256) = options
@@ -389,8 +387,7 @@ fn from_cache(
             "REGISTRY_CACHE_MANIFEST_UNPINNED",
             "offline cache acceptance requires an externally stored cache-manifest digest",
             0,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     };
     if !body_path.is_file() || !metadata_path.is_file() {
@@ -401,8 +398,7 @@ fn from_cache(
             "REGISTRY_CACHE_MISSING",
             "offline mode requires both cached body and metadata",
             0,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     let metadata_bytes = fs::read(metadata_path)?;
@@ -415,8 +411,7 @@ fn from_cache(
             "REGISTRY_CACHE_MANIFEST_PIN_MISMATCH",
             "cache metadata does not match the external manifest pin",
             0,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     let metadata: CacheMetadata = serde_json::from_slice(&metadata_bytes)?;
@@ -432,8 +427,7 @@ fn from_cache(
             "REGISTRY_CACHE_METADATA_MISMATCH",
             "cache metadata does not match this request",
             metadata.http_status,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     if !metadata
@@ -447,8 +441,7 @@ fn from_cache(
             "REGISTRY_CACHE_EXTERNAL_PIN_MISMATCH",
             "cached response digest does not match the external pin",
             metadata.http_status,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     let fetched_at = DateTime::parse_from_rfc3339(&metadata.fetched_at)
@@ -463,8 +456,7 @@ fn from_cache(
             "REGISTRY_CACHE_TIME_INVALID",
             "cache fetched_at is more than five minutes in the future",
             metadata.http_status,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     let cache_age_seconds = now.signed_duration_since(fetched_at).num_seconds().max(0) as u64;
@@ -479,8 +471,7 @@ fn from_cache(
                 options.max_cache_age_seconds
             ),
             metadata.http_status,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     let body = fs::read(body_path)?;
@@ -493,32 +484,32 @@ fn from_cache(
             "REGISTRY_CACHE_HASH_MISMATCH",
             "cached response no longer matches its pinned digest and size",
             metadata.http_status,
-            body_path.to_path_buf(),
-            metadata_path.to_path_buf(),
+            (body_path, metadata_path),
         ));
     }
     build_report(
         options,
-        source_url.into(),
-        "cache",
-        metadata.fetched_at,
-        metadata.http_status,
-        metadata.http_client_sha256,
-        actual_sha,
-        body,
-        Some(cache_age_seconds),
-        cache_manifest_sha256,
-        body_path.to_path_buf(),
-        metadata_path.to_path_buf(),
+        RegistryReportInput {
+            source_url: source_url.into(),
+            source: "cache".into(),
+            fetched_at: metadata.fetched_at,
+            http_status: metadata.http_status,
+            http_client_sha256: metadata.http_client_sha256,
+            response_sha256: actual_sha,
+            body,
+            cache_age_seconds: Some(cache_age_seconds),
+            cache_manifest_sha256,
+            cache_body_path: body_path.to_path_buf(),
+            cache_metadata_path: metadata_path.to_path_buf(),
+        },
     )
 }
 
 fn terminate_and_reap(child: &mut std::process::Child) -> std::process::ExitStatus {
     kill_process_group(child.id());
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return status,
-            Ok(None) | Err(_) => {}
+        if let Ok(Some(status)) = child.try_wait() {
+            return status;
         }
         if child.kill().is_ok() {
             break;
@@ -547,11 +538,9 @@ fn kill_process_group(child_id: u32) {
     let _ = child_id;
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_report(
-    options: &RegistryEvidenceOptions,
+struct RegistryReportInput {
     source_url: String,
-    source: &str,
+    source: String,
     fetched_at: String,
     http_status: u16,
     http_client_sha256: String,
@@ -561,7 +550,25 @@ fn build_report(
     cache_manifest_sha256: String,
     cache_body_path: PathBuf,
     cache_metadata_path: PathBuf,
+}
+
+fn build_report(
+    options: &RegistryEvidenceOptions,
+    input: RegistryReportInput,
 ) -> Result<RegistryEvidenceReport, RegistryEvidenceError> {
+    let RegistryReportInput {
+        source_url,
+        source,
+        fetched_at,
+        http_status,
+        http_client_sha256,
+        response_sha256,
+        body,
+        cache_age_seconds,
+        cache_manifest_sha256,
+        cache_body_path,
+        cache_metadata_path,
+    } = input;
     let (package_exists, versions) = match http_status {
         200..=299 => parse_versions(options.ecosystem, &body)?,
         404 | 410 | 451 => (false, Vec::new()),
@@ -569,12 +576,11 @@ fn build_report(
             return Ok(failure_report(
                 options,
                 source_url,
-                source,
+                &source,
                 "REGISTRY_HTTP_STATUS_UNEXPECTED",
                 format!("registry returned HTTP {status}"),
                 status,
-                cache_body_path,
-                cache_metadata_path,
+                (&cache_body_path, &cache_metadata_path),
             ))
         }
     };
@@ -633,7 +639,7 @@ fn build_report(
         package_exists,
         version_exists,
         versions,
-        source: source.into(),
+        source,
         source_url,
         fetched_at,
         http_status,
@@ -802,7 +808,6 @@ fn bounded_detail(stderr: &[u8]) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn failure_report(
     options: &RegistryEvidenceOptions,
     source_url: String,
@@ -810,8 +815,7 @@ fn failure_report(
     reason_code: &str,
     detail: impl Into<String>,
     http_status: u16,
-    cache_body_path: PathBuf,
-    cache_metadata_path: PathBuf,
+    cache_paths: (&Path, &Path),
 ) -> RegistryEvidenceReport {
     RegistryEvidenceReport {
         evidence_version: REGISTRY_EVIDENCE_VERSION.into(),
@@ -835,8 +839,8 @@ fn failure_report(
         response_bytes: 0,
         cache_age_seconds: None,
         cache_manifest_sha256: String::new(),
-        cache_body_path,
-        cache_metadata_path,
+        cache_body_path: cache_paths.0.to_path_buf(),
+        cache_metadata_path: cache_paths.1.to_path_buf(),
         detail: detail.into(),
     }
 }

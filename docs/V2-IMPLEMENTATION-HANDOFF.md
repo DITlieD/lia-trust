@@ -16,8 +16,10 @@ capability-derived assurance statement.
 - Live next-version record: `docs/roadmap.md`
 - Backlog authorities: `bench/harbor/results/lia-improvement-backlog.json` and
   `bench/harbor/results/lia-41-item-scores.json`
-- Status vocabulary: `SHIPPED`, `PARTIAL`, `MISSING`, `DOC-ONLY`,
-  `OBSOLETE-BY-LATER-DESIGN`, `EXTERNAL-ONLY`, `BLOCKED`
+- Status vocabulary: `SHIPPED`, `SHIPPED-LOCAL` (implemented and verified on the named local
+  host/fixture boundary; no remote or live-service execution implied), `SHIPPED-SCOPED` (implemented
+  and verified only for the row's explicitly stated boundary and residuals), `PARTIAL`, `MISSING`,
+  `DOC-ONLY`, `OBSOLETE-BY-LATER-DESIGN`, `EXTERNAL-ONLY`, `BLOCKED`
 - Assurance rule: static readiness is not runtime success; recorded adapters are not live agents;
   process liveness is not useful-work evidence.
 
@@ -79,7 +81,7 @@ to decide that a deletion is legitimate.
 | L3 | Thin adapters plus capability-derived assurance | Claude, Codex, Gemini CLI, Cursor, and generic boundaries now have explicit mappings and honest per-adapter cells | SHIPPED | adapter conformance and probe-derived report for every shipped adapter | M4 complete; M6 reproof |
 | L4 | Ground, syco, AST, taint with production consumers | Claude/Codex writes use central AST dispatch; Codex exposes signed ground/syco/taint paths; unsupported Terminus cells remain CANNOT-OBSERVE | SHIPPED | 8/8 production-path cases plus signed receipts and offline verification | M2 complete; M6 reproof |
 | L5 | Three-arm trust benchmark and utility companion | recorded corpora and scorecards exist; some live/utility lanes remain partial/deferred | PARTIAL | current frozen corpus replay, separated recorded/live metrics, optional external lanes labeled | M6 |
-| L6 | Conformance/action/docs/release pack | docs, action, conformance suite, README and `v0.1.0` tag exist; no prebuilt release artifact, sample-repo Action bundle, or different-machine verification evidence is present | PARTIAL | tagged prebuilt release, sample-repo Action bundle, and separately built/different-machine verification proof, or exact external blocker | M6 |
+| L6 | Conformance/action/docs/release pack | docs, action and conformance suite exist; public `v0.1.0` has a checksumed Linux binary, while the V2 HEAD is unpublished and its new two-runner IS-5 workflow cannot start under the current GitHub billing lock | PARTIAL | current-head sample-repo Action bundle plus separately built/different-runner verification after the account lock is cleared and the V2 commits are pushed/tagged | exact external gate recorded in M6 |
 | L7 | Post-release funding applications with claims discipline | `docs/programs.md`; no application action authorized | EXTERNAL-ONLY | local truthful templates/lint complete; actual submission remains owner/third-party action | M6 record |
 
 ## Requirement ledger B — 41-item live improvement backlog
@@ -116,7 +118,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 | P2-5 | duplicate-command memo | TTL/context/capacity-bound verified-denial memo keyed by command and normalized execution context | SHIPPED | duplicate avoids respawn; TTL/context/capacity and never-allow rules proven | M3 complete |
 | P2-10 | L6 docs pack | required public documents now present | SHIPPED | claims lint and file checklist | M6 |
 | P2-11 | assurance drift prevention | runtime probe executes real boundaries, signed rows, independent generic diff, clean verify and negative tamper; install is UNMEASURED | SHIPPED | 3/3 runtime probes match downward-only truth; defaults are AUDIT/CANNOT-OBSERVE | M2 complete; M6 reproof |
-| P2-12 | IS-5 publish path | local action definition, local smoke, and v0.1.0 tag only; no release workflow/prebuilt artifact/sample-repo bundle/different-machine verification evidence | PARTIAL | local prerequisites pass and missing remote/cross-machine proof is either obtained or recorded as an exact external gate | M6 |
+| P2-12 | IS-5 publish path | local Action smoke exists; public `v0.1.0` includes a checksumed Linux binary; CI now defines a sample-repo producer and artifact-fed different-runner verifier, but GitHub rejects jobs before step 1 because the account is locked for billing | PARTIAL | local prerequisites pass; remote two-runner execution awaits account unlock plus push of the current V2 HEAD | exact external gate recorded in M6 |
 | P2-13 | license/advisory checks | `deny.toml`, license policy/scripts | SHIPPED | current dependency audit/license checks | M6 |
 | P2-14 | wire coverage | wire map/check/action | SHIPPED | final wire checker | M6 |
 | P2-15 | claims separation | `claims.json` separates recorded/live/utility | SHIPPED | claims lint and manual final reconciliation | M6 |
@@ -503,7 +505,8 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M6 — proof and completion audit
 
-- State: pending
+- State: `AUDITED_PENDING_COMMIT`
+- Starting HEAD: `ec786caf4be4c51f7b6abafa93cd07ef27a5f391`
 - Requirements: every ledger row reconciled; all local acceptance evidence current; external gates exact
 - Discovered baseline debt: repair the two `needless_return` findings and `make_outcome`
   `too_many_arguments` in `lia-gates`, `tools/lia_wire_check/src/lib.rs:256`
@@ -511,6 +514,54 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
   `too_many_arguments` findings (including `run_wrap`) so full-workspace strict clippy passes without allows. Apply the
   recorded full-workspace rustfmt drift and re-evaluate extraction of the M1 cleanup classifier from
   `shell.rs`.
+- Debt closure: all 30 strict-Clippy findings across six packages were repaired without lint allows;
+  the 18-file rustfmt baseline was normalized; the recursive-cleanup parser/policy was extracted from
+  `shell.rs` into `cleanup.rs`; and the frozen gate manifest was regenerated for the formatted checker
+  sources. The first independent retry exposed one private extraction seam, which was fixed before the
+  bounded audit passed strict Clippy, rustfmt, cleanup CLI 4/4, `lia-gates` 26/26, registry 1/1,
+  `lia-bench` 5/5, and CLI all-target compilation.
+- The final proof loop also removed two public `lia-policy` path helpers with zero production/test
+  callers, corrected the fallback license checker to evaluate SPDX `OR`/`AND`/parentheses instead of
+  requiring every alternative, and isolated Gemini/Cursor homes in the installer smoke so a fixture
+  run can never resolve those targets to live user configuration.
+- CI proof path: `wire.yml` now makes strict formatting, workspace Clippy, workspace tests,
+  conformance, claims policy and dependency-license checks explicit. IS-5 is a two-job path: the first
+  job drives the shipped composite Action on a generated third-party-style sample repository and
+  uploads its signed AUDIT bundle; a dependent fresh runner separately builds `lia verify`, downloads
+  that bundle, and requires `accepted=true`.
+- Current public evidence checked 2026-07-22: GitHub release `v0.1.0` is public with
+  `lia-v0.1.0-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS`. This proves the original release asset,
+  not the unpublished V2 commits in this handoff.
+- Exact remote blocker checked 2026-07-22: both public `wire` runs fail before any workflow step; the
+  GitHub check annotation says, `The job was not started because your account is locked due to a
+  billing issue.` Therefore the current-head sample Action artifact and different-runner verifier are
+  implemented but unexecuted remotely. Clearing that account lock, pushing the V2 commits and tagging
+  a new release are owner-controlled external actions; they are not replaced by local evidence.
+- Other exact external gates: live Claude/Codex agent measurements require owner OAuth/service access;
+  the second-model utility lane requires the external model/service and approved cost; public-log
+  verification requires a live identity/issuer-pinned bundle; funding applications remain deliberate
+  post-release owner submissions. Recorded fixtures remain labelled recorded/local and are never
+  substituted for these lanes.
+- Final independent local audit `[MEASURED]`: PyYAML parsed both Action/workflow definitions and all
+  26 workflow run blocks plus the composite Action run block passed shell syntax checks; workspace
+  format, all-target check and strict Clippy
+  passed with zero Clippy allows; workspace tests passed 142/142 across 37 test/doc-test executables;
+  conformance passed 10/10; the M5 production suite 7/7, cleanup CLI 4/4 and `lia-policy` 7/7 are
+  included in that proof. Release builds, the frozen-manifest check, and the exact 26-file wire check
+  passed with no DARK symbol. Claims lint passed for `docs/` and `README.md`; 13 JSON artifacts parsed;
+  `cargo deny check` passed advisories/bans/licenses/sources; the fallback SPDX self-test passed 7/7
+  and checked 137 dependency manifests with zero bad/missing entries. Both installer smokes passed,
+  including four isolated harness homes, and local IS-5 produced a signed AUDIT bundle that a
+  separately targeted verifier build accepted. `git diff --check` passed.
+- Final ledger reconciliation: L0/L0b/L1-L4 and every `SHIPPED` backlog row have current local proof;
+  the Linux/adapter/public-verifier/registry/credential rows retain `SHIPPED-LOCAL` or
+  `SHIPPED-SCOPED` because their stated residual boundaries still apply; P2-17 remains
+  `OBSOLETE-BY-LATER-DESIGN`. L5, L6, P1-13, P1-20, P2-12, P3-1 and P3-7 remain `PARTIAL` only for the
+  exact live/service/cost/remote-release gates above. L7 and P3-8 remain `EXTERNAL-ONLY`. No fixture,
+  local build, or public v0.1.0 artifact is presented as proof of the unpublished V2 remote lanes.
+- Local blocker: none. Remote publication/agent/service gates remain open exactly as listed.
+- Next action: commit the audited M6 implementation, record its hash in a documentation-only commit,
+  then push/tag only after the owner clears the GitHub billing lock and authorizes publication.
 - Commit: pending
 
 ## Commit recording convention

@@ -152,11 +152,6 @@ pub fn validate_reason_code(code: &str) -> Result<(), PolicyError> {
     }
 }
 
-pub fn load_rules_yaml(path: impl AsRef<Path>) -> Result<PolicyDocument, PolicyError> {
-    let bytes = fs::read(path.as_ref())?;
-    load_rules_yaml_bytes(&bytes)
-}
-
 pub fn load_rules_yaml_bytes(bytes: &[u8]) -> Result<PolicyDocument, PolicyError> {
     let doc: PolicyDocument = serde_yaml::from_slice(bytes)?;
     validate_document(&doc)?;
@@ -190,25 +185,6 @@ pub fn freeze_policy_from_path(path: impl AsRef<Path>) -> Result<FrozenPolicy, P
     frozen.source_bytes_sha256 = sha256_hex(&bytes);
     frozen.policy_hash = blake3_hex(&bytes);
     Ok(frozen)
-}
-
-pub fn write_frozen_yaml(
-    frozen: &FrozenPolicy,
-    path: impl AsRef<Path>,
-) -> Result<(), PolicyError> {
-    let doc = PolicyDocument {
-        policy_id: frozen.policy_id.clone(),
-        version: frozen.version.clone(),
-        rules: frozen.rules.clone(),
-    };
-    let yaml = serde_yaml::to_string(&doc)?;
-    if let Some(parent) = path.as_ref().parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
-    }
-    fs::write(path, yaml)?;
-    Ok(())
 }
 
 pub fn evaluate_frozen(
@@ -607,8 +583,7 @@ rules:
                 "artifact".into(),
                 EvidenceItem {
                     sha256: Some(
-                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-                            .into(),
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into(),
                     ),
                     value: None,
                     bytes: Some(1),

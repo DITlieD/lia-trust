@@ -54,9 +54,9 @@ struct PubDef {
 }
 
 const COMMON_FN_NAMES: &[&str] = &[
-    "new", "default", "from", "into", "build", "run", "init", "get", "set", "len",
-    "name", "kind", "id", "fmt", "clone", "next", "read", "write", "open", "close",
-    "start", "stop", "call", "apply", "check", "emit", "push", "pop",
+    "new", "default", "from", "into", "build", "run", "init", "get", "set", "len", "name", "kind",
+    "id", "fmt", "clone", "next", "read", "write", "open", "close", "start", "stop", "call",
+    "apply", "check", "emit", "push", "pop",
 ];
 
 pub fn load_allowlist(path: &Path) -> Result<Vec<AllowRow>, WireCheckError> {
@@ -100,7 +100,10 @@ fn is_test_path(path: &Path) -> bool {
         .components()
         .filter_map(|c| c.as_os_str().to_str().map(|s| s.to_ascii_lowercase()))
         .collect();
-    if parts.iter().any(|p| p == "tests" || p == "benches" || p == "examples") {
+    if parts
+        .iter()
+        .any(|p| p == "tests" || p == "benches" || p == "examples")
+    {
         return true;
     }
     let stem = path
@@ -108,7 +111,9 @@ fn is_test_path(path: &Path) -> bool {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    stem.ends_with("_test") || stem.ends_with("_tests") || path.file_name().and_then(|s| s.to_str()) == Some("build.rs")
+    stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || path.file_name().and_then(|s| s.to_str()) == Some("build.rs")
 }
 
 fn strip_comments_preserve_newlines(text: &str) -> String {
@@ -144,7 +149,11 @@ fn strip_comments_preserve_newlines(text: &str) -> String {
 }
 
 fn line_of(text: &str, byte_idx: usize) -> usize {
-    text[..byte_idx.min(text.len())].bytes().filter(|&b| b == b'\n').count() + 1
+    text[..byte_idx.min(text.len())]
+        .bytes()
+        .filter(|&b| b == b'\n')
+        .count()
+        + 1
 }
 
 fn wire_dark_near(lines: &[&str], def_line: usize, re: &Regex) -> Option<String> {
@@ -253,8 +262,8 @@ fn cfg_test_line_mask(text: &str) -> Vec<bool> {
                         break;
                     }
                 }
-                for k in start..j {
-                    mask[k] = true;
+                for item in mask.iter_mut().take(j).skip(start) {
+                    *item = true;
                 }
                 i = j;
                 continue;
@@ -265,7 +274,11 @@ fn cfg_test_line_mask(text: &str) -> Vec<bool> {
     mask
 }
 
-fn production_refs(root: &Path, symbol: &str, defining: &Path) -> Result<(usize, usize), WireCheckError> {
+fn production_refs(
+    root: &Path,
+    symbol: &str,
+    defining: &Path,
+) -> Result<(usize, usize), WireCheckError> {
     let mut prod = 0usize;
     let mut same_file_non_def = 0usize;
     let word = Regex::new(&format!(r"\b{}\b", regex::escape(symbol)))?;
@@ -276,7 +289,10 @@ fn production_refs(root: &Path, symbol: &str, defining: &Path) -> Result<(usize,
     {
         let path = entry.path();
         let rel = path.strip_prefix(root).unwrap_or(path);
-        let parts: Vec<_> = rel.components().filter_map(|c| c.as_os_str().to_str()).collect();
+        let parts: Vec<_> = rel
+            .components()
+            .filter_map(|c| c.as_os_str().to_str())
+            .collect();
         if parts.iter().any(|p| *p == "target" || *p == ".git") {
             continue;
         }
@@ -318,7 +334,8 @@ fn allowlisted(rows: &[AllowRow], path: &Path, root: &Path, symbol: &str, unit: 
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/");
-    rows.iter().any(|r| r.path == rel && r.symbol == symbol && r.unit == unit)
+    rows.iter()
+        .any(|r| r.path == rel && r.symbol == symbol && r.unit == unit)
 }
 
 pub fn check_files(
@@ -361,7 +378,7 @@ pub fn check_files(
                     line: def.line,
                     verdict: Verdict::Dark,
                     detail: format!(
-                        "WIRE-DARK[{unit}] present but no allowlist row for {rel}::{}" ,
+                        "WIRE-DARK[{unit}] present but no allowlist row for {rel}::{}",
                         def.name
                     ),
                 });
@@ -374,7 +391,8 @@ pub fn check_files(
                     kind: def.kind,
                     line: def.line,
                     verdict: Verdict::UnsoundName,
-                    detail: "name too common for name-grep; Layer 3 coverage is authoritative".into(),
+                    detail: "name too common for name-grep; Layer 3 coverage is authoritative"
+                        .into(),
                 });
                 continue;
             }
@@ -425,7 +443,9 @@ mod tests {
         .unwrap();
         let findings = check_files(&dir, &[lib], &[]).unwrap();
         assert!(
-            findings.iter().any(|f| f.symbol == "seed_unwired_dark" && f.verdict == Verdict::Dark),
+            findings
+                .iter()
+                .any(|f| f.symbol == "seed_unwired_dark" && f.verdict == Verdict::Dark),
             "{findings:?}"
         );
         assert_eq!(exit_code(&findings), 1);

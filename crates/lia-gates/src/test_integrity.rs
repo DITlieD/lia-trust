@@ -4,9 +4,10 @@ use serde_json::json;
 use crate::{make_outcome, GateError, GateOutcome, GateRequest};
 
 pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateError> {
-    let claimed = request.payload.claimed_pass.ok_or_else(|| {
-        GateError::Invalid("test-integrity requires claimed_pass".into())
-    })?;
+    let claimed = request
+        .payload
+        .claimed_pass
+        .ok_or_else(|| GateError::Invalid("test-integrity requires claimed_pass".into()))?;
     let evidence = json!({
         "claimed_pass": claimed,
         "wrapper": request.payload.wrapper,
@@ -14,8 +15,7 @@ pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateEr
 
     if !claimed {
         let mut out = make_outcome(
-            "test-integrity",
-            request.action_id,
+            request,
             Verdict::Allow,
             "TEST_INTEGRITY_OK",
             RiskTier::Security,
@@ -29,8 +29,7 @@ pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateEr
 
     let Some(wrapper) = request.payload.wrapper.as_ref() else {
         return Ok(make_outcome(
-            "test-integrity",
-            request.action_id,
+            request,
             Verdict::Refuted,
             "TEST_FABRICATED_PASS",
             RiskTier::Security,
@@ -42,8 +41,7 @@ pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateEr
 
     if !hl4_complete(wrapper) {
         return Ok(make_outcome(
-            "test-integrity",
-            request.action_id,
+            request,
             Verdict::Deny,
             "TEST_MISSING_HL4_FIELDS",
             RiskTier::Security,
@@ -55,8 +53,7 @@ pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateEr
 
     if wrapper.exit_code != 0 {
         return Ok(make_outcome(
-            "test-integrity",
-            request.action_id,
+            request,
             Verdict::Refuted,
             "TEST_FABRICATED_PASS",
             RiskTier::Security,
@@ -70,8 +67,7 @@ pub fn check_test_integrity(request: &GateRequest) -> Result<GateOutcome, GateEr
     }
 
     let mut out = make_outcome(
-        "test-integrity",
-        request.action_id,
+        request,
         Verdict::Allow,
         "TEST_INTEGRITY_OK",
         RiskTier::Security,

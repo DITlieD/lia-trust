@@ -36,9 +36,8 @@ pub struct CheckReport {
 }
 
 pub fn read_manifest(manifest: &Path) -> Result<Vec<String>, FreezeError> {
-    let text = fs::read_to_string(manifest).map_err(|e| {
-        FreezeError::Config(format!("manifest {}: {e}", manifest.display()))
-    })?;
+    let text = fs::read_to_string(manifest)
+        .map_err(|e| FreezeError::Config(format!("manifest {}: {e}", manifest.display())))?;
     let mut out = Vec::new();
     for raw in text.lines() {
         let ln = raw.trim();
@@ -98,7 +97,11 @@ pub fn write_lock(lock_file: &Path, rows: &BTreeMap<String, String>) -> Result<(
     Ok(())
 }
 
-pub fn lock_baseline(root: &Path, manifest: &Path, lock_file: &Path) -> Result<BTreeMap<String, String>, FreezeError> {
+pub fn lock_baseline(
+    root: &Path,
+    manifest: &Path,
+    lock_file: &Path,
+) -> Result<BTreeMap<String, String>, FreezeError> {
     let entries = read_manifest(manifest)?;
     let mut rows = BTreeMap::new();
     for rel in entries {
@@ -114,7 +117,11 @@ pub fn lock_baseline(root: &Path, manifest: &Path, lock_file: &Path) -> Result<B
     Ok(rows)
 }
 
-pub fn check_baseline(root: &Path, manifest: &Path, lock_file: &Path) -> Result<CheckReport, FreezeError> {
+pub fn check_baseline(
+    root: &Path,
+    manifest: &Path,
+    lock_file: &Path,
+) -> Result<CheckReport, FreezeError> {
     if !lock_file.is_file() {
         return Ok(CheckReport {
             ok: false,
@@ -125,7 +132,8 @@ pub fn check_baseline(root: &Path, manifest: &Path, lock_file: &Path) -> Result<
                     .to_string_lossy()
                     .into(),
                 kind: ChangeKind::MissingBaseline,
-                detail: "no gate-manifest.lock — run lia_gate_freeze --lock out-of-band first".into(),
+                detail: "no gate-manifest.lock — run lia_gate_freeze --lock out-of-band first"
+                    .into(),
             }],
         });
     }
@@ -212,6 +220,9 @@ mod tests {
         fs::write(&frozen, "v2\n").unwrap();
         let report = check_baseline(&dir, &manifest, &lock).unwrap();
         assert!(!report.ok);
-        assert!(report.changes.iter().any(|c| c.kind == ChangeKind::Modified));
+        assert!(report
+            .changes
+            .iter()
+            .any(|c| c.kind == ChangeKind::Modified));
     }
 }

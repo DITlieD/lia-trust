@@ -76,5 +76,9 @@ fn gate_evaluate_frozen_exit_codes() {
         .arg(&missing)
         .status()
         .expect("spawn lia gate deny");
-    assert_eq!(denied.code(), Some(2), "missing evidence must deny with exit 2");
+    assert_eq!(
+        denied.code(),
+        Some(2),
+        "missing evidence must deny with exit 2"
+    );
 }

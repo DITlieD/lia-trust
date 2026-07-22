@@ -1,13 +1,13 @@
 # gate-manifest.lock — frozen wiring-gate baseline (R8). Do NOT edit by hand.
 # Regenerate out-of-band: cargo run -p lia_gate_freeze -- --lock
 # format: relpath<TAB>algo<TAB>hexdigest
-.github/workflows/wire.yml	blake3	a34861c750f5c467c75305f414aa35741ab36d414185ef96accdd0c621e75994
+.github/workflows/wire.yml	blake3	23af848e6f148b476523b8e3bcc4add6afab1967cfabf0282545d7a160d98271
 tools/cargo-llvm-cov.pin	blake3	f608e19e097fda642a1392dd61d2b6fb8364157ce9c9c6678c464d17e4150dd2
 tools/gate-manifest.txt	blake3	a6ce56bb4961b35bf1077c31811c64611b43d06577f567bae050933c0eb747ba
 tools/lia_gate_freeze/Cargo.toml	blake3	38906ec14d45c77af1247ace2849496ba20cd8855bf5b17cf157cf64fcd50894
-tools/lia_gate_freeze/src/lib.rs	blake3	1eed4fa9a310492fb48e5fe3863c2862e9ef5bcd63b234e1fe61d3336ac2835e
+tools/lia_gate_freeze/src/lib.rs	blake3	640d629c1e470862fe08dcac82a56910d61802df1e84a46e181ed385a54a9c33
 tools/lia_gate_freeze/src/main.rs	blake3	9c631cd3fef39fdd8d8950d5fbbde4f6190f839e9601f580d3adc119335ec82d
 tools/lia_wire_check/Cargo.toml	blake3	db76ec97351daa8347b4ad5c3972279c83d6118464fc6d8accd4358d03b79589
-tools/lia_wire_check/src/lib.rs	blake3	cd02c745424d6a572b63351c96c0ea3cf9fcaacd3d4af54476b688b32994bf85
-tools/lia_wire_check/src/main.rs	blake3	56b0ef59bdaabbb6e1e36b2ce2956b9499cfded2c0b5fea9bc258f30de80cb0f
+tools/lia_wire_check/src/lib.rs	blake3	1e8cf59ccf8be3cec30b6156f09a850aaa4744e472f09fc63da2cc687afb8539
+tools/lia_wire_check/src/main.rs	blake3	151d129319e6238f8c849121efab88436df083e8945a93dd46ea7dadde790a51
 tools/wire-dark-allowlist.txt	blake3	af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262

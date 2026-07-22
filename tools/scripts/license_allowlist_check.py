@@ -25,9 +25,65 @@ def ok(lic: str, allow: set[str]) -> bool:
         return False
     if lic in allow:
         return True
-    s = lic.replace("/", " OR ")
-    parts = [p.strip() for p in re.split(r"\s+(?:OR|AND|WITH)\s+|\(|\)", s) if p and p.strip()]
-    return bool(parts) and all(p in allow or p == "LLVM-exception" for p in parts)
+
+    # SPDX expressions are boolean: one permitted OR branch is enough, while every
+    # term in an AND branch must be permitted. The old flat split required every
+    # license named anywhere in the expression and rejected valid alternatives.
+    expression = lic.replace("/", " OR ")
+    tokens = re.findall(r"\(|\)|\bAND\b|\bOR\b|\bWITH\b|[A-Za-z0-9.+-]+", expression)
+    if not tokens or "".join(tokens) != re.sub(r"\s+", "", expression):
+        return False
+
+    position = 0
+
+    def parse_primary() -> bool:
+        nonlocal position
+        if position >= len(tokens):
+            raise ValueError("missing license term")
+        if tokens[position] == "(":
+            position += 1
+            value = parse_or_expression()
+            if position >= len(tokens) or tokens[position] != ")":
+                raise ValueError("unclosed SPDX group")
+            position += 1
+            return value
+        license_id = tokens[position]
+        if license_id in {"AND", "OR", "WITH", ")"}:
+            raise ValueError("expected license identifier")
+        position += 1
+        value = license_id in allow
+        if position < len(tokens) and tokens[position] == "WITH":
+            position += 1
+            if position >= len(tokens):
+                raise ValueError("missing SPDX exception")
+            exception_id = tokens[position]
+            position += 1
+            value = value and exception_id == "LLVM-exception"
+        return value
+
+    def parse_and_expression() -> bool:
+        nonlocal position
+        value = parse_primary()
+        while position < len(tokens) and tokens[position] == "AND":
+            position += 1
+            right = parse_primary()
+            value = value and right
+        return value
+
+    def parse_or_expression() -> bool:
+        nonlocal position
+        value = parse_and_expression()
+        while position < len(tokens) and tokens[position] == "OR":
+            position += 1
+            right = parse_and_expression()
+            value = value or right
+        return value
+
+    try:
+        accepted = parse_or_expression()
+        return accepted and position == len(tokens)
+    except ValueError:
+        return False
 
 
 def registry_root() -> pathlib.Path | None:
@@ -37,6 +93,26 @@ def registry_root() -> pathlib.Path | None:
         if c.is_dir():
             return c
     return None
+
+
+def self_test() -> int:
+    allow = {"Apache-2.0", "MIT", "BSD-3-Clause"}
+    cases = {
+        "MIT OR LGPL-2.1-or-later": True,
+        "MIT AND LGPL-2.1-or-later": False,
+        "(MIT OR Apache-2.0) AND BSD-3-Clause": True,
+        "(MIT OR Apache-2.0) AND BSD-1-Clause": False,
+        "Apache-2.0 WITH LLVM-exception": True,
+        "Apache-2.0 WITH Classpath-exception-2.0": False,
+        "MIT OR": False,
+    }
+    for expression, expected in cases.items():
+        actual = ok(expression, allow)
+        if actual != expected:
+            print(f"self-test failed: {expression!r}: expected={expected} actual={actual}")
+            return 2
+    print(f"license-allowlist self-test OK cases={len(cases)}")
+    return 0
 
 
 def main() -> int:
@@ -92,4 +168,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        sys.exit(self_test())
+    if len(sys.argv) != 1:
+        raise SystemExit("usage: license_allowlist_check.py [--self-test]")
     sys.exit(main())

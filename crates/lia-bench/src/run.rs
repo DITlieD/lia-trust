@@ -40,6 +40,8 @@ pub const BENCH_RESULT_VERSION: &str = "lia-bench-result-v1";
 pub const AGENT_MODE_RECORDED: &str = "recorded-agent";
 pub const AGENT_MODE_LIVE: &str = "live-agent";
 
+type ApplyResult = (bool, Option<Verdict>, Option<String>, Option<String>);
+
 #[derive(Debug, Error)]
 pub enum BenchError {
     #[error("io: {0}")]
@@ -273,7 +275,7 @@ fn run_via_generic(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     let mut cfg = cfg.clone();
     cfg.run_id = Some(run_id);
     let ctx = RunContext {
@@ -377,10 +379,7 @@ fn action_to_hook_json(case: &CorpusCase, repo: &Path) -> Result<String, BenchEr
             } else {
                 "cargo test"
             };
-            (
-                "Bash",
-                serde_json::json!({ "command": cmd }),
-            )
+            ("Bash", serde_json::json!({ "command": cmd }))
         }
         other => {
             return Err(BenchError::Invalid(format!(
@@ -430,14 +429,8 @@ fn action_to_mcp_json(case: &CorpusCase, repo: &Path) -> Result<String, BenchErr
                 "content": payload.text.unwrap_or_default(),
             }),
         ),
-        ActionKind::DeleteFile => (
-            "delete_file",
-            serde_json::json!({ "path": payload.path }),
-        ),
-        ActionKind::Shell => (
-            "shell",
-            serde_json::json!({ "command": payload.command }),
-        ),
+        ActionKind::DeleteFile => ("delete_file", serde_json::json!({ "path": payload.path })),
+        ActionKind::Shell => ("shell", serde_json::json!({ "command": payload.command })),
         ActionKind::RunTest => {
             if payload.wrapper.is_some() {
                 return Err(BenchError::Invalid(
@@ -480,7 +473,7 @@ fn run_via_hook(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     match case.entry {
         EntryKind::Ground | EntryKind::Syco | EntryKind::Request => {
             return run_via_generic(case, cfg, repo, journal, run_id, identity);
@@ -535,7 +528,7 @@ fn run_via_mcp(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     match case.entry {
         EntryKind::Ground | EntryKind::Syco | EntryKind::Request => {
             return run_via_generic(case, cfg, repo, journal, run_id, identity);
@@ -601,7 +594,7 @@ fn run_case_on(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     match harness {
         Harness::Generic => run_via_generic(case, cfg, repo, journal, run_id, identity),
         Harness::ClaudeCode => run_via_hook(case, cfg, repo, journal, run_id, identity),
@@ -664,7 +657,10 @@ pub fn write_signed_bench_bundle(
     let metrics_bytes = serde_json::to_vec_pretty(&result.metrics)?;
     fs::write(bundle.join("evidence/metrics.json"), &metrics_bytes)?;
     let table = render_trust_integrity_table(&result.table);
-    fs::write(bundle.join("evidence/trust-integrity.tsv"), table.as_bytes())?;
+    fs::write(
+        bundle.join("evidence/trust-integrity.tsv"),
+        table.as_bytes(),
+    )?;
 
     // Independent verifier entropy: never derive the "independent" verifier key from the
     // journal secret, or one leak yields both and the two-party check is illusory.
@@ -898,8 +894,7 @@ pub fn run_arm(opts: &BenchOptions) -> Result<BenchResultBundle, BenchError> {
 
     let run_id = Uuid::new_v4();
     let started = Utc::now();
-    let identity =
-        SigningIdentity::from_secret_key_hex(opts.key_id.clone(), &opts.secret_key_hex)?;
+    let identity = SigningIdentity::from_secret_key_hex(opts.key_id.clone(), &opts.secret_key_hex)?;
     let journal_path = work.path().join("journal.db");
     let mut trials = Vec::new();
     {
@@ -917,17 +912,15 @@ pub fn run_arm(opts: &BenchOptions) -> Result<BenchResultBundle, BenchError> {
                 Arm::On => {
                     let (blocked, verdict, reason, detail) = if use_live_loop {
                         let ep = live_endpoint.as_ref().unwrap();
-                        crate::live::run_case_live(
-                            ep,
-                            case,
-                            &opts.harness,
-                            &cfg,
-                            &repo,
-                            &journal,
+                        let context = crate::live::LiveCaseContext {
+                            harness: &opts.harness,
+                            cfg: &cfg,
+                            repo: &repo,
+                            journal: &journal,
                             run_id,
-                            &identity,
-                            &mut traffic,
-                        )?
+                            identity: &identity,
+                        };
+                        crate::live::run_case_live(ep, case, &context, &mut traffic)?
                     } else {
                         run_case_on(
                             case,

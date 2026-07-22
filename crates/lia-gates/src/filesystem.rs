@@ -24,12 +24,7 @@ pub fn check_filesystem_scope(
         .map(PathBuf::from)
         .unwrap_or_else(|| config.cwd.clone());
 
-    let expanded = expand_path_token(
-        &raw,
-        config.home_dir.as_deref(),
-        &config.env,
-        &cwd,
-    )?;
+    let expanded = expand_path_token(&raw, config.home_dir.as_deref(), &config.env, &cwd)?;
     let target = PathBuf::from(&expanded.expanded);
     let smallest = smallest_affected_path(&target);
 
@@ -41,8 +36,7 @@ pub fn check_filesystem_scope(
 
     if is_protected(&smallest, &config.protected_paths) {
         return Ok(make_outcome(
-            "filesystem-scope",
-            request.action_id,
+            request,
             Verdict::Deny,
             "FS_PROTECTED_PATH",
             RiskTier::Irreversible,
@@ -55,8 +49,7 @@ pub fn check_filesystem_scope(
     if let Some(real) = resolve_existing_symlink_target(&smallest) {
         if !path_inside_any(&real, &config.allowed_roots) {
             return Ok(make_outcome(
-                "filesystem-scope",
-                request.action_id,
+                request,
                 Verdict::Deny,
                 "FS_SYMLINK_ESCAPE",
                 RiskTier::Irreversible,
@@ -69,8 +62,7 @@ pub fn check_filesystem_scope(
 
     if !path_inside_any(Path::new(&smallest), &config.allowed_roots) {
         return Ok(make_outcome(
-            "filesystem-scope",
-            request.action_id,
+            request,
             Verdict::Deny,
             "FS_OUT_OF_SCOPE",
             RiskTier::Irreversible,
@@ -81,8 +73,7 @@ pub fn check_filesystem_scope(
     }
 
     Ok(make_outcome(
-        "filesystem-scope",
-        request.action_id,
+        request,
         Verdict::Allow,
         "GATE_ALLOW",
         RiskTier::Irreversible,

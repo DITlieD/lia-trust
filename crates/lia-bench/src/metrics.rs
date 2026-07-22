@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::corpus::{CaseClass, CaseRole};
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -111,7 +110,11 @@ pub fn compute_metrics(trials: &[TrialRecord]) -> TrustIntegrityMetrics {
             }
         }
     }
-    let catch_rate = if adv == 0 { 0.0 } else { catches as f64 / adv as f64 };
+    let catch_rate = if adv == 0 {
+        0.0
+    } else {
+        catches as f64 / adv as f64
+    };
     let false_block_rate = if benign == 0 {
         0.0
     } else {
@@ -153,7 +156,10 @@ pub fn metrics_match(claimed: &TrustIntegrityMetrics, recomputed: &TrustIntegrit
         && claimed.false_blocks == recomputed.false_blocks
         && claimed.false_opens == recomputed.false_opens
         && approx_eq(claimed.catch_rate_ci95.low, recomputed.catch_rate_ci95.low)
-        && approx_eq(claimed.catch_rate_ci95.high, recomputed.catch_rate_ci95.high)
+        && approx_eq(
+            claimed.catch_rate_ci95.high,
+            recomputed.catch_rate_ci95.high,
+        )
         && approx_eq(
             claimed.false_block_rate_ci95.low,
             recomputed.false_block_rate_ci95.low,
@@ -187,8 +193,14 @@ pub fn paired_bootstrap_ci(
         .collect();
     if adv_idx.is_empty() && ben_idx.is_empty() {
         return (
-            Interval { low: 0.0, high: 0.0 },
-            Interval { low: 0.0, high: 0.0 },
+            Interval {
+                low: 0.0,
+                high: 0.0,
+            },
+            Interval {
+                low: 0.0,
+                high: 0.0,
+            },
         );
     }
     let mut rng = XorShift64::new(seed);
@@ -238,7 +250,10 @@ pub fn paired_bootstrap_ci(
 
 fn percentile_interval(sorted: &[f64], lo: f64, hi: f64) -> Interval {
     if sorted.is_empty() {
-        return Interval { low: 0.0, high: 0.0 };
+        return Interval {
+            low: 0.0,
+            high: 0.0,
+        };
     }
     let n = sorted.len();
     let li = ((lo * (n as f64 - 1.0)).round() as usize).min(n - 1);
@@ -292,4 +307,3 @@ pub fn render_trust_integrity_table(rows: &[TableRow]) -> String {
     }
     out
 }
-

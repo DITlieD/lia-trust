@@ -13,6 +13,31 @@ env:
   CARGO_LLVM_COV_VERSION: "0.8.7"
 
 jobs:
+  quality_and_conformance:
+    name: "M6 quality + conformance"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: formatting
+        run: cargo fmt --all -- --check
+      - name: strict clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: workspace tests
+        run: cargo test --workspace --no-fail-fast
+      - name: conformance
+        run: cargo run -p lia-cli -- conform --suite conformance
+      - name: claims policy
+        run: |
+          cargo run -p lia-cli -- claims-lint --root docs
+          cargo run -p lia-cli -- claims-lint --root README.md
+      - name: dependency license allowlist
+        run: |
+          python3 tools/scripts/license_allowlist_check.py --self-test
+          python3 tools/scripts/license_allowlist_check.py
+
   layer1_dead_code_and_deps:
     name: "L1 dead_code + machete"
     runs-on: ubuntu-latest
@@ -133,3 +158,83 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: is1 smoke
         run: bash tools/scripts/is1_smoke.sh
+
+  is5_action_producer:
+    name: "IS-5 sample-repo Action producer"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - id: sample
+        name: create third-party-style sample repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          sample="${RUNNER_TEMP}/lia-is5-sample"
+          evidence="${RUNNER_TEMP}/lia-is5-evidence"
+          mkdir -p "$sample" "$evidence"
+          printf '%s\n' base >"$sample/readme.txt"
+          git -C "$sample" init -q
+          git -C "$sample" config user.email local-is5@lia.local
+          git -C "$sample" config user.name local-is5
+          git -C "$sample" add readme.txt
+          git -C "$sample" commit -q -m base
+          printf '%s\n' 'head change' >>"$sample/readme.txt"
+          git -C "$sample" add readme.txt
+          git -C "$sample" commit -q -m head
+          printf '%s\n' supplied-evidence >"$evidence/note.txt"
+          echo "repo=$sample" >>"$GITHUB_OUTPUT"
+          echo "base=$(git -C "$sample" rev-parse HEAD~1)" >>"$GITHUB_OUTPUT"
+          echo "head=$(git -C "$sample" rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+          echo "evidence=$evidence" >>"$GITHUB_OUTPUT"
+      - id: action
+        name: produce signed AUDIT bundle through the shipped Action
+        uses: ./.github/actions/lia-trust
+        with:
+          repo: ${{ steps.sample.outputs.repo }}
+          base: ${{ steps.sample.outputs.base }}
+          head: ${{ steps.sample.outputs.head }}
+          evidence: ${{ steps.sample.outputs.evidence }}
+          secret_key_hex: 6666666666666666666666666666666666666666666666666666666666666666
+          out: ${{ runner.temp }}/lia-is5-bundle
+      - name: assert Action assurance and local conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.action.outputs.assurance_level }}" = AUDIT
+          ./target/release/lia conform --suite conformance
+          ./target/release/lia claims-lint --root docs
+          ./target/release/lia claims-lint --root README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lia-is5-audit-bundle
+          path: ${{ runner.temp }}/lia-is5-bundle
+          if-no-files-found: error
+
+  is5_different_runner_verify:
+    name: "IS-5 different-runner offline verify"
+    needs: is5_action_producer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: lia-is5-audit-bundle
+          path: ${{ runner.temp }}/lia-is5-bundle
+      - name: separately build verifier and verify producer bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARGO_TARGET_DIR="${RUNNER_TEMP}/lia-is5-verifier" cargo build -p lia-cli --release
+          "${RUNNER_TEMP}/lia-is5-verifier/release/lia" verify \
+            "${RUNNER_TEMP}/lia-is5-bundle" >"${RUNNER_TEMP}/lia-is5-verify.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "lia-is5-verify.json").read_text())
+          assert report["accepted"] is True, report
+          print("IS-5 different-runner verification accepted")
+          PY

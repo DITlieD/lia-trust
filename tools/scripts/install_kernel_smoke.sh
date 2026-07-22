@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Gating smoke: fixture install → HARD fabricated-pass + OOS delete on Claude hook
-# and Codex MCP → journal-verify → uninstall. Does not touch live ~/.claude/.codex.
+# and Codex MCP → journal-verify → uninstall. All four harness homes are isolated.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -14,6 +14,8 @@ trap 'rm -rf "$WORK"' EXIT
 LIA_HOME="$WORK/lia-home"
 CLAUDE_HOME="$WORK/claude"
 CODEX_HOME="$WORK/codex"
+GEMINI_HOME="$WORK/gemini"
+CURSOR_HOME="$WORK/cursor"
 REPO="$WORK/repo"
 mkdir -p "$REPO/src"
 echo "fn main() {}" >"$REPO/src/main.rs"
@@ -24,6 +26,8 @@ echo "== install (fixture) =="
   --lia-bin "$LIA" \
   --claude-home "$CLAUDE_HOME" \
   --codex-home "$CODEX_HOME" \
+  --gemini-home "$GEMINI_HOME" \
+  --cursor-home "$CURSOR_HOME" \
   --allowed-root "$REPO" \
   --json >"$WORK/install.json"
 
@@ -36,6 +40,10 @@ assert any(
 )
 t=open("$CODEX_HOME/config.toml").read()
 assert "[mcp_servers.lia-trust]" in t
+g=json.load(open("$GEMINI_HOME/settings.json"))
+assert g["hooks"]["BeforeTool"]
+c=json.load(open("$CURSOR_HOME/hooks.json"))
+assert c["version"] == 1 and c["hooks"]
 print("wiring ok")
 PY
 
@@ -177,9 +185,21 @@ PY
 "$LIA" journal-verify "$DB"
 
 echo "== status + uninstall =="
-"$LIA" status --lia-home "$LIA_HOME" --claude-home "$CLAUDE_HOME" --codex-home "$CODEX_HOME" --json \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["claude_hook_installed"] and d["codex_mcp_installed"]'
-"$LIA" uninstall --lia-home "$LIA_HOME" --claude-home "$CLAUDE_HOME" --codex-home "$CODEX_HOME" --json \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert not d["claude_hook_installed"] and not d["codex_mcp_installed"]'
+"$LIA" status \
+  --lia-home "$LIA_HOME" \
+  --claude-home "$CLAUDE_HOME" \
+  --codex-home "$CODEX_HOME" \
+  --gemini-home "$GEMINI_HOME" \
+  --cursor-home "$CURSOR_HOME" \
+  --json \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert all(d[k] for k in ("claude_hook_installed", "codex_mcp_installed", "gemini_hook_installed", "cursor_hooks_installed"))'
+"$LIA" uninstall \
+  --lia-home "$LIA_HOME" \
+  --claude-home "$CLAUDE_HOME" \
+  --codex-home "$CODEX_HOME" \
+  --gemini-home "$GEMINI_HOME" \
+  --cursor-home "$CURSOR_HOME" \
+  --json \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert not any(d[k] for k in ("claude_hook_installed", "codex_mcp_installed", "gemini_hook_installed", "cursor_hooks_installed"))'
 
 echo "install_kernel_smoke OK"

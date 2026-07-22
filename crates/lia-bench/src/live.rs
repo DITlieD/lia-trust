@@ -21,6 +21,17 @@ use uuid::Uuid;
 use crate::corpus::{CaseClass, CaseRole, CorpusCase, ValueOrRaw};
 use crate::run::{is_catch_verdict, worst, BenchError, Harness};
 
+pub(crate) type ApplyResult = (bool, Option<Verdict>, Option<String>, Option<String>);
+
+pub(crate) struct LiveCaseContext<'a> {
+    pub harness: &'a Harness,
+    pub cfg: &'a GateConfig,
+    pub repo: &'a Path,
+    pub journal: &'a Journal,
+    pub run_id: Uuid,
+    pub identity: &'a SigningIdentity,
+}
+
 #[derive(Debug, Clone)]
 pub struct LiveEndpoint {
     pub base_url: String,
@@ -77,7 +88,7 @@ impl LiveEndpoint {
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(self.api_key.as_bytes());
-        format!("sha256:{}", hex::encode(h.finalize())[..16].to_string())
+        format!("sha256:{}", &hex::encode(h.finalize())[..16])
     }
 
     pub fn base_host(&self) -> String {
@@ -655,7 +666,7 @@ fn apply_via_generic(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     let mut cfg = cfg.clone();
     cfg.run_id = Some(run_id);
     let ctx = RunContext {
@@ -691,7 +702,7 @@ fn apply_via_hook(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     let raw = serde_json::to_string(&json!({
         "session_id": "bench-live",
         "cwd": repo.to_string_lossy(),
@@ -742,7 +753,7 @@ fn apply_via_mcp(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     let raw = serde_json::to_string(&json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -801,7 +812,7 @@ fn apply_gate_request(
     journal: &Journal,
     run_id: Uuid,
     identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
     let req = GateRequest {
         gate_id: gate_id.into(),
         action_id: Uuid::new_v4(),
@@ -820,15 +831,16 @@ fn apply_gate_request(
 }
 
 fn apply_tool(
-    harness: &Harness,
+    context: &LiveCaseContext<'_>,
     name: &str,
     args: Value,
-    repo: &Path,
-    cfg: &GateConfig,
-    journal: &Journal,
-    run_id: Uuid,
-    identity: &SigningIdentity,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
+    let harness = context.harness;
+    let repo = context.repo;
+    let cfg = context.cfg;
+    let journal = context.journal;
+    let run_id = context.run_id;
+    let identity = context.identity;
     match name {
         "write_file" => {
             let path = args
@@ -848,9 +860,14 @@ fn apply_tool(
                 ..Default::default()
             };
             match harness {
-                Harness::Generic => {
-                    apply_via_generic(ActionKind::WriteFile, payload, cfg, journal, run_id, identity)
-                }
+                Harness::Generic => apply_via_generic(
+                    ActionKind::WriteFile,
+                    payload,
+                    cfg,
+                    journal,
+                    run_id,
+                    identity,
+                ),
                 Harness::ClaudeCode => apply_via_hook(
                     "Write",
                     json!({"file_path": path, "content": content}),
@@ -882,9 +899,14 @@ fn apply_tool(
                 ..Default::default()
             };
             match harness {
-                Harness::Generic => {
-                    apply_via_generic(ActionKind::DeleteFile, payload, cfg, journal, run_id, identity)
-                }
+                Harness::Generic => apply_via_generic(
+                    ActionKind::DeleteFile,
+                    payload,
+                    cfg,
+                    journal,
+                    run_id,
+                    identity,
+                ),
                 Harness::ClaudeCode => apply_via_hook(
                     "Delete",
                     json!({"file_path": path}),
@@ -894,9 +916,14 @@ fn apply_tool(
                     run_id,
                     identity,
                 ),
-                Harness::Codex => {
-                    apply_via_mcp("delete_file", json!({"path": path}), cfg, journal, run_id, identity)
-                }
+                Harness::Codex => apply_via_mcp(
+                    "delete_file",
+                    json!({"path": path}),
+                    cfg,
+                    journal,
+                    run_id,
+                    identity,
+                ),
             }
         }
         "run_shell" => {
@@ -1014,16 +1041,14 @@ fn apply_tool(
                 ..Default::default()
             };
             match harness {
-                Harness::Generic | Harness::ClaudeCode => {
-                    apply_via_generic(
-                        ActionKind::AddDependency,
-                        payload,
-                        cfg,
-                        journal,
-                        run_id,
-                        identity,
-                    )
-                }
+                Harness::Generic | Harness::ClaudeCode => apply_via_generic(
+                    ActionKind::AddDependency,
+                    payload,
+                    cfg,
+                    journal,
+                    run_id,
+                    identity,
+                ),
                 Harness::Codex => apply_via_mcp(
                     "add_dependency",
                     json!({"package": package, "version": version}),
@@ -1052,7 +1077,11 @@ fn apply_tool(
             ))
         }
         "emit_agreement" => {
-            let risk = match args.get("risk").and_then(|v| v.as_str()).unwrap_or("dependency") {
+            let risk = match args
+                .get("risk")
+                .and_then(|v| v.as_str())
+                .unwrap_or("dependency")
+            {
                 "data" => AgreementRisk::Data,
                 "security" => AgreementRisk::Security,
                 "quality" => AgreementRisk::Quality,
@@ -1142,17 +1171,13 @@ fn apply_tool(
     }
 }
 
-pub fn run_case_live(
+pub(crate) fn run_case_live(
     endpoint: &LiveEndpoint,
     case: &CorpusCase,
-    harness: &Harness,
-    cfg: &GateConfig,
-    repo: &Path,
-    journal: &Journal,
-    run_id: Uuid,
-    identity: &SigningIdentity,
+    context: &LiveCaseContext<'_>,
     traffic: &mut LiveTrafficProof,
-) -> Result<(bool, Option<Verdict>, Option<String>, Option<String>), BenchError> {
+) -> Result<ApplyResult, BenchError> {
+    let repo = context.repo;
     let (system, user) = prompt_for_case(case, repo);
     let tools = tool_defs();
     let (http, resp, req_id) = endpoint.messages_tools(&system, &user, &tools)?;
@@ -1182,8 +1207,7 @@ pub fn run_case_live(
             }
         }
     };
-    let (blocked, verdict, reason, detail) =
-        apply_tool(harness, &name, args, repo, cfg, journal, run_id, identity)?;
+    let (blocked, verdict, reason, detail) = apply_tool(context, &name, args)?;
     let detail = Some(format!(
         "{}; tool={name}; via={via}; model={}; host={}",
         detail.unwrap_or_else(|| "live-tool-loop".into()),
@@ -1289,7 +1313,10 @@ fn canonical_tool_from_case(case: &CorpusCase, repo: &Path) -> Result<(String, V
     )))
 }
 
-pub fn write_traffic_proof(out_dir: &Path, proof: &LiveTrafficProof) -> Result<PathBuf, BenchError> {
+pub fn write_traffic_proof(
+    out_dir: &Path,
+    proof: &LiveTrafficProof,
+) -> Result<PathBuf, BenchError> {
     fs::create_dir_all(out_dir)?;
     let path = out_dir.join("live-traffic-proof.json");
     fs::write(&path, serde_json::to_vec_pretty(proof)?)?;
