@@ -505,7 +505,7 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 
 ### M6 — proof and completion audit
 
-- State: `AUDITED_PENDING_COMMIT`
+- State: `MILESTONE_COMMITTED`
 - Starting HEAD: `ec786caf4be4c51f7b6abafa93cd07ef27a5f391`
 - Requirements: every ledger row reconciled; all local acceptance evidence current; external gates exact
 - Discovered baseline debt: repair the two `needless_return` findings and `make_outcome`
@@ -560,9 +560,10 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
   exact live/service/cost/remote-release gates above. L7 and P3-8 remain `EXTERNAL-ONLY`. No fixture,
   local build, or public v0.1.0 artifact is presented as proof of the unpublished V2 remote lanes.
 - Local blocker: none. Remote publication/agent/service gates remain open exactly as listed.
-- Next action: commit the audited M6 implementation, record its hash in a documentation-only commit,
-  then push/tag only after the owner clears the GitHub billing lock and authorizes publication.
-- Commit: pending
+- Next action: local V2 implementation is complete. Push/tag only after the owner clears the GitHub
+  billing lock and authorizes publication; then require the two-runner IS-5 workflow before promoting
+  the current V2 HEAD to a remote release.
+- Commit: `abab75adc024babba6eb04ab393d88fe8c97ad92` (`chore: complete V2 proof and debt closure`)
 
 ## Commit recording convention
 
