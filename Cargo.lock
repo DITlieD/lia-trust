@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "lia-adapters"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "hex",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "lia-ast"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "hex",
@@ -582,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "lia-bench"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "lia-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "clap",
@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "lia-gates"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "lia-ground"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "lia-journal"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "lia-policy"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "lia-protocol"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "hex",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "lia-syco"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "hex",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "lia-taint"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -739,7 +739,7 @@ dependencies = [
 
 [[package]]
 name = "lia-verify"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "chrono",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "lia_gate_freeze"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -774,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "lia_wire_check"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",

@@ -10,14 +10,14 @@ commercial Harness / Canvas product layers.
 
 ## One-line install (recommended)
 
-Install the current stable release (`v0.2.0`):
+Install the current stable release (`v0.2.1`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DITlieD/lia-trust/main/install.sh | bash
 ```
 
 The installer downloads the checksum-verified Linux x86_64 release binary. If that asset is
-unavailable or the platform is unsupported, `auto` mode builds the same `v0.2.0` tag from source;
+unavailable or the platform is unsupported, `auto` mode builds the same `v0.2.1` tag from source;
 checksum or archive verification failures never fall back.
 
 From a clone, force a source build of the release version:
@@ -28,7 +28,7 @@ LIA_INSTALL_MODE=source bash install.sh
 
 That script will:
 
-1. Install verified `lia 0.2.0` from the `v0.2.0` release, or build that version from source
+1. Install verified `lia 0.2.1` from the `v0.2.1` release, or build that version from source
 2. Install the binary to `~/.local/bin/lia`
 3. Wire **Claude Code**, **Codex**, **Gemini CLI**, and **Cursor** with `lia install --apply-live`
 
@@ -75,11 +75,11 @@ lia uninstall --apply-live    # remove wiring; keeps journal/keys
 
 ```bash
 cargo build -p lia-cli --release
-./target/release/lia --version  # lia 0.2.0
+./target/release/lia --version  # lia 0.2.1
 ./target/release/lia install --apply-live
 ```
 
-The [`v0.2.0` release](https://github.com/DITlieD/lia-trust/releases/tag/v0.2.0) ships a verified
+The [`v0.2.1` release](https://github.com/DITlieD/lia-trust/releases/tag/v0.2.1) ships a verified
 Linux x86_64 binary and `SHA256SUMS`. Other targets use the pinned source fallback and require
 Rust plus Git; they are not presented as prebuilt-verified platforms.
 

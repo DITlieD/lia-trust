@@ -16,6 +16,6 @@ bash "$ROOT/install.sh"
 LIA="$LIA_PREFIX/bin/lia"
 test -x "$LIA"
 "$LIA" --help >/dev/null
-test "$("$LIA" --version)" = "lia 0.2.0"
+test "$("$LIA" --version)" = "lia 0.2.1"
 "$LIA" install --help >/dev/null 2>&1 || "$LIA" install --dry-run --json >/dev/null
 echo "install_sh_smoke OK bin=$LIA"

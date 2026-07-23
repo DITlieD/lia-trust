@@ -271,6 +271,140 @@ mod tests {
             .any(|o| o.verdict == lia_protocol::Verdict::Refuted));
     }
 
+    /// Grok camelCase read_file + target_file under allowed root → allow.
+    #[test]
+    fn grok_camelcase_read_file_allows_in_scope() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Cargo.toml");
+        std::fs::write(&target, "[package]\nname = \"t\"\n").unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "read_file",
+            "toolInput": {"target_file": target.to_string_lossy()},
+            "hookEventName": "pre_tool_use",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+        assert_eq!(decision.permission_decision_reason, "lia gates allow");
+    }
+
+    /// Grok camelCase run_terminal_command under allowed root → allow.
+    #[test]
+    fn grok_camelcase_run_terminal_command_allows() {
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": format!("ls {}", root.path().display())},
+            "hookEventName": "pre_tool_use",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+    }
+
+    /// Grok camelCase search_replace + target_file under root → allow.
+    #[test]
+    fn grok_camelcase_search_replace_allows_in_scope() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("src.rs");
+        std::fs::write(&target, "fn main() {}\n").unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "search_replace",
+            "toolInput": {
+                "target_file": target.to_string_lossy(),
+                "old_string": "fn main() {}",
+                "new_string": "fn main() { /* ok */ }",
+            },
+            "hookEventName": "preToolUse",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+        assert_eq!(decision.permission_decision_reason, "lia gates allow");
+    }
+
+    /// Claude-native snake_case Read still works after alias support.
+    #[test]
+    fn claude_native_snake_case_read_still_allows() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("readme.md");
+        std::fs::write(&target, "ok\n").unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": target.to_string_lossy()},
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+    }
+
+    /// Grok read_file with path outside allowed roots → deny (filesystem-scope still works).
+    #[test]
+    fn grok_camelcase_read_file_denies_out_of_scope() {
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "read_file",
+            "toolInput": {"target_file": "/etc/passwd"},
+            "hookEventName": "pre_tool_use",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "deny");
+    }
+
+    /// Completely missing tool name still errors (fail-closed parse).
+    #[test]
+    fn grok_missing_tool_name_still_errors() {
+        let err = parse_pre_tool_use(r#"{"hookEventName":"pre_tool_use","toolInput":{}}"#)
+            .expect_err("must fail closed without tool name");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("missing tool_name"),
+            "unexpected error: {msg}"
+        );
+    }
+
     #[test]
     fn inspection_tools_are_read_only_named() {
         assert!(inspection_tool_names().contains(&MCP_INSPECT_VERIFY_RUN));

@@ -40,44 +40,84 @@ pub struct HookDecision {
     pub dispatch: Option<DispatchResult>,
 }
 
+/// First non-null string among `keys` on a JSON object (Claude snake_case + Grok camelCase).
+fn first_str_field(v: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(s) = v.get(*key).and_then(|x| x.as_str()) {
+            return Some(s.to_string());
+        }
+    }
+    None
+}
+
+/// Map Grok / alternate tool names onto Claude Code canonical tool names.
+fn normalize_tool_name(raw: &str) -> String {
+    match raw {
+        "run_terminal_command" | "shell" | "bash" => CC_TOOL_BASH.to_string(),
+        "read_file" | "read" => CC_TOOL_READ.to_string(),
+        "search_replace" | "StrReplace" | "edit" => CC_TOOL_EDIT.to_string(),
+        "write" | "WriteFile" => CC_TOOL_WRITE.to_string(),
+        "multi_edit" => CC_TOOL_MULTI_EDIT.to_string(),
+        "notebook_edit" => CC_TOOL_NOTEBOOK_EDIT.to_string(),
+        "delete_file" | "delete" => "Delete".to_string(),
+        // Claude-native names and anything else pass through unchanged.
+        other => other.to_string(),
+    }
+}
+
+/// Normalize hook event aliases to Claude's `PreToolUse`.
+fn normalize_hook_event_name(raw: &str) -> String {
+    match raw {
+        "pre_tool_use" | "preToolUse" | "PreToolUse" => CC_HOOK_EVENT_PRE_TOOL_USE.to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Path field aliases used by Claude (`file_path`) and Grok (`target_file`, camelCase).
+fn tool_path(ti: &Value) -> Option<String> {
+    first_str_field(
+        ti,
+        &[
+            CC_INPUT_FILE_PATH,
+            "target_file",
+            "path",
+            "filePath",
+            "targetFile",
+        ],
+    )
+}
+
+/// Write/edit body aliases: Claude `content`, Grok/edit `new_string`, etc.
+fn tool_write_text(ti: &Value) -> Option<String> {
+    first_str_field(
+        ti,
+        &[CC_INPUT_CONTENT, "new_string", "contents", "newString", "text"],
+    )
+}
+
 pub fn parse_pre_tool_use(raw: &str) -> Result<PreToolUseInput, AdapterError> {
     let v: Value = serde_json::from_str(raw).map_err(|e| AdapterError::Invalid(e.to_string()))?;
-    let hook_event_name = v
-        .get(CC_FIELD_HOOK_EVENT_NAME)
-        .and_then(|x| x.as_str())
-        .unwrap_or("")
-        .to_string();
-    let tool_name = v
-        .get(CC_FIELD_TOOL_NAME)
-        .and_then(|x| x.as_str())
-        .ok_or_else(|| AdapterError::Invalid("missing tool_name".into()))?
-        .to_string();
-    let tool_input = v.get(CC_FIELD_TOOL_INPUT).cloned().unwrap_or(Value::Null);
-    let cwd = v
-        .get(CC_FIELD_CWD)
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string());
+    let hook_event_name = normalize_hook_event_name(
+        &first_str_field(&v, &[CC_FIELD_HOOK_EVENT_NAME, "hookEventName"]).unwrap_or_default(),
+    );
+    let tool_name_raw = first_str_field(&v, &[CC_FIELD_TOOL_NAME, "toolName", "tool"])
+        .ok_or_else(|| AdapterError::Invalid("missing tool_name".into()))?;
+    let tool_name = normalize_tool_name(&tool_name_raw);
+    let tool_input = v
+        .get(CC_FIELD_TOOL_INPUT)
+        .or_else(|| v.get("toolInput"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let cwd = first_str_field(&v, &[CC_FIELD_CWD, "workspaceRoot"]);
     Ok(PreToolUseInput {
-        session_id: v
-            .get(CC_FIELD_SESSION_ID)
-            .and_then(|x| x.as_str())
-            .map(|s| s.to_string()),
-        transcript_path: v
-            .get("transcript_path")
-            .and_then(|x| x.as_str())
-            .map(|s| s.to_string()),
+        session_id: first_str_field(&v, &[CC_FIELD_SESSION_ID, "sessionId"]),
+        transcript_path: first_str_field(&v, &["transcript_path", "transcriptPath"]),
         cwd,
-        permission_mode: v
-            .get("permission_mode")
-            .and_then(|x| x.as_str())
-            .map(|s| s.to_string()),
+        permission_mode: first_str_field(&v, &["permission_mode", "permissionMode"]),
         hook_event_name,
         tool_name,
         tool_input,
-        tool_use_id: v
-            .get(CC_FIELD_TOOL_USE_ID)
-            .and_then(|x| x.as_str())
-            .map(|s| s.to_string()),
+        tool_use_id: first_str_field(&v, &[CC_FIELD_TOOL_USE_ID, "toolUseId"]),
     })
 }
 
@@ -117,15 +157,10 @@ pub fn map_tool_to_action(
             }
         }
         CC_TOOL_WRITE | CC_TOOL_EDIT => {
-            let path = ti
-                .get(CC_INPUT_FILE_PATH)
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| AdapterError::Invalid("Write/Edit missing file_path".into()))?
-                .to_string();
-            let text = ti
-                .get(CC_INPUT_CONTENT)
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string());
+            let path = tool_path(ti).ok_or_else(|| {
+                AdapterError::Invalid("Write/Edit missing file_path".into())
+            })?;
+            let text = tool_write_text(ti);
             Ok((
                 ActionKind::WriteFile,
                 GatePayload {
@@ -138,18 +173,18 @@ pub fn map_tool_to_action(
             ))
         }
         CC_TOOL_MULTI_EDIT => {
-            let path = ti
-                .get(CC_INPUT_FILE_PATH)
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| AdapterError::Invalid("MultiEdit missing file_path".into()))?
-                .to_string();
+            let path = tool_path(ti).ok_or_else(|| {
+                AdapterError::Invalid("MultiEdit missing file_path".into())
+            })?;
             let text = ti
                 .get(CC_INPUT_EDITS)
                 .and_then(|e| e.as_array())
                 .map(|edits| {
                     edits
                         .iter()
-                        .filter_map(|edit| edit.get("new_string").and_then(|x| x.as_str()))
+                        .filter_map(|edit| {
+                            first_str_field(edit, &["new_string", "newString", "content"])
+                        })
                         .collect::<Vec<_>>()
                         .join("\n")
                 });
@@ -165,16 +200,23 @@ pub fn map_tool_to_action(
             ))
         }
         CC_TOOL_NOTEBOOK_EDIT => {
-            let path = ti
-                .get(CC_INPUT_NOTEBOOK_PATH)
-                .or_else(|| ti.get(CC_INPUT_FILE_PATH))
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| AdapterError::Invalid("NotebookEdit missing notebook_path".into()))?
-                .to_string();
-            let text = ti
-                .get(CC_INPUT_NEW_SOURCE)
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string());
+            let path = first_str_field(
+                ti,
+                &[
+                    CC_INPUT_NOTEBOOK_PATH,
+                    CC_INPUT_FILE_PATH,
+                    "target_file",
+                    "path",
+                    "filePath",
+                    "targetFile",
+                    "notebookPath",
+                ],
+            )
+            .ok_or_else(|| AdapterError::Invalid("NotebookEdit missing notebook_path".into()))?;
+            let text = first_str_field(
+                ti,
+                &[CC_INPUT_NEW_SOURCE, "newSource", "content", "new_string", "newString"],
+            );
             Ok((
                 ActionKind::WriteFile,
                 GatePayload {
@@ -187,11 +229,8 @@ pub fn map_tool_to_action(
             ))
         }
         CC_TOOL_READ => {
-            let path = ti
-                .get(CC_INPUT_FILE_PATH)
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| AdapterError::Invalid("Read missing file_path".into()))?
-                .to_string();
+            let path = tool_path(ti)
+                .ok_or_else(|| AdapterError::Invalid("Read missing file_path".into()))?;
             Ok((
                 ActionKind::ReadFile,
                 GatePayload {
@@ -201,13 +240,9 @@ pub fn map_tool_to_action(
                 },
             ))
         }
-        other if other.eq_ignore_ascii_case("Delete") || other == "delete_file" => {
-            let path = ti
-                .get(CC_INPUT_FILE_PATH)
-                .or_else(|| ti.get("path"))
-                .and_then(|x| x.as_str())
-                .ok_or_else(|| AdapterError::Invalid("Delete missing file_path".into()))?
-                .to_string();
+        other if other.eq_ignore_ascii_case("Delete") => {
+            let path = tool_path(ti)
+                .ok_or_else(|| AdapterError::Invalid("Delete missing file_path".into()))?;
             Ok((
                 ActionKind::DeleteFile,
                 GatePayload {
