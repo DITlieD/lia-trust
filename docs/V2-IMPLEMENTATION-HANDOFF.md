@@ -570,3 +570,17 @@ behavior is shipped. Acceptance below is re-evaluated at the final HEAD.
 Because a commit cannot contain its own hash without history rewriting, each milestone implementation
 commit is followed by a documentation-only handoff commit that records the implementation commit hash.
 No commit is amended or rewritten. Neither commit includes automated-contributor metadata.
+
+## v0.2.0 release — verified installer and publication
+
+- State: `PREPARED_PENDING_AUDIT`
+- Version decision: V2 is a completed feature milestone while the crate remains pre-1.0; the next
+  SemVer is `0.2.0` and the immutable release tag is `v0.2.0`. Historical `v0.1.0` is preserved.
+- Installer contract: the public `curl | bash` path pins `v0.2.0`, accepts only the verified Linux
+  x86_64 asset and exact `SHA256SUMS` entry, validates the one-file archive and `lia 0.2.0` binary
+  identity, and refuses source fallback after checksum/archive failure. Missing assets and unsupported
+  platforms may fall back only to a same-version source build.
+- Artifact contract: `lia-v0.2.0-x86_64-unknown-linux-gnu.tar.gz` plus `SHA256SUMS`.
+- Remote proof: pending local audit, commit, tag, release upload and fresh public one-line execution.
+- Hosted CI limitation: the two-runner workflow remains defined but cannot start while GitHub reports
+  the account billing lock; no hosted result is claimed.

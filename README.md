@@ -10,21 +10,25 @@ commercial Harness / Canvas product layers.
 
 ## One-line install (recommended)
 
-From a **clone** of this repo:
-
-```bash
-bash install.sh
-```
-
-Classic **curl | bash** style:
+Install the current stable release (`v0.2.0`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DITlieD/lia-trust/main/install.sh | bash
 ```
 
+The installer downloads the checksum-verified Linux x86_64 release binary. If that asset is
+unavailable or the platform is unsupported, `auto` mode builds the same `v0.2.0` tag from source;
+checksum or archive verification failures never fall back.
+
+From a clone, force a source build of the release version:
+
+```bash
+LIA_INSTALL_MODE=source bash install.sh
+```
+
 That script will:
 
-1. Build `lia` (or reuse `target/release/lia` if present)
+1. Install verified `lia 0.2.0` from the `v0.2.0` release, or build that version from source
 2. Install the binary to `~/.local/bin/lia`
 3. Wire **Claude Code**, **Codex**, **Gemini CLI**, and **Cursor** with `lia install --apply-live`
 
@@ -35,6 +39,9 @@ That script will:
 | `LIA_NO_WIRE=1` | Binary only — do not touch harness configuration |
 | `LIA_DRY_RUN=1` | Plan harness merge only |
 | `LIA_PREFIX=~/.local` | Install prefix (`bin/lia`) |
+| `LIA_INSTALL_MODE=auto` | Prefer verified prebuilt; source fallback only when unavailable/unsupported |
+| `LIA_INSTALL_MODE=prebuilt` | Require the verified release asset; never build from source |
+| `LIA_INSTALL_MODE=source` | Build the pinned release tag from source |
 | `LIA_FORCE_BUILD=1` | Always rebuild |
 
 Examples:
@@ -42,6 +49,9 @@ Examples:
 ```bash
 # binary only
 LIA_NO_WIRE=1 bash install.sh
+
+# verified prebuilt only
+LIA_NO_WIRE=1 LIA_INSTALL_MODE=prebuilt bash install.sh
 
 # dry-run harness wiring
 LIA_DRY_RUN=1 bash install.sh
@@ -65,11 +75,13 @@ lia uninstall --apply-live    # remove wiring; keeps journal/keys
 
 ```bash
 cargo build -p lia-cli --release
+./target/release/lia --version  # lia 0.2.0
 ./target/release/lia install --apply-live
 ```
 
-A prebuilt linux x86_64 binary ships with each
-[release](https://github.com/DITlieD/lia-trust/releases) (checksums included).
+The [`v0.2.0` release](https://github.com/DITlieD/lia-trust/releases/tag/v0.2.0) ships a verified
+Linux x86_64 binary and `SHA256SUMS`. Other targets use the pinned source fallback and require
+Rust plus Git; they are not presented as prebuilt-verified platforms.
 
 What install does:
 

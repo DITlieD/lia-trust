@@ -24,7 +24,7 @@ use crate::AdapterError;
 /// MCP protocol version we advertise (spec pin used by current Codex clients).
 pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 pub const MCP_SERVER_NAME: &str = "lia-trust";
-pub const MCP_SERVER_VERSION: &str = "0.1.0";
+pub const MCP_SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcRequest {

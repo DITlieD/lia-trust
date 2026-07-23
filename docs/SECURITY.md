@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| `main` / unreleased 0.1.x | Yes (best effort) |
-| Pre-release tags | Best effort while maintained |
+| `v0.2.x` | Yes |
+| `main` after `v0.2.0` | Best effort until the next release |
+| `v0.1.x` | No; upgrade to `v0.2.0` |
 
 ## Reporting a vulnerability
 
@@ -64,6 +65,9 @@ See `docs/threat-model.md` (Authenticity vs integrity, Known limitations) and
 ## Supply chain
 
 - License: Apache-2.0 (`LICENSE`, `deny.toml` allowlist).
+- The public installer pins `v0.2.0`, verifies the exact release asset against `SHA256SUMS`, and
+  rejects checksum/archive/version mismatches without source fallback. Only missing assets or an
+  unsupported prebuilt platform may fall back to building the same release tag.
 - Prefer release builds: `cargo build -p lia-cli --release`.
 - Optional public-log verification delegates to an operator-pinned `cosign` executable and requires
   pinned certificate identity + issuer. The report records verifier/artifact/bundle digests; it is

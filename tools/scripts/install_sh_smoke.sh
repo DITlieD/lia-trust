@@ -8,6 +8,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 export LIA_PREFIX="$WORK/prefix"
 export LIA_NO_WIRE=1
+export LIA_INSTALL_MODE=source
 export LIA_SKIP_BUILD=0
 # Prefer existing release build if present (fast); still installs into prefix
 bash "$ROOT/install.sh"
@@ -15,5 +16,6 @@ bash "$ROOT/install.sh"
 LIA="$LIA_PREFIX/bin/lia"
 test -x "$LIA"
 "$LIA" --help >/dev/null
+test "$("$LIA" --version)" = "lia 0.2.0"
 "$LIA" install --help >/dev/null 2>&1 || "$LIA" install --dry-run --json >/dev/null
 echo "install_sh_smoke OK bin=$LIA"

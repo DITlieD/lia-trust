@@ -43,7 +43,7 @@ use lia_verify::{
 use uuid::Uuid;
 
 #[derive(Debug, Parser)]
-#[command(name = "lia", about = "LIA Trust Kernel")]
+#[command(name = "lia", version, about = "LIA Trust Kernel")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
