@@ -28,7 +28,7 @@ pub use filesystem::check_filesystem_scope;
 pub use journal_tamper::check_journal_tamper;
 pub use secret::{check_secret_output, ShareableProjection};
 pub use shell::check_shell_irreversible;
-pub use spawn::check_spawn_agent;
+pub use spawn::{check_spawn_agent, spawn_detail_line};
 pub use test_integrity::check_test_integrity;
 
 pub const CORE_GATE_IDS: &[&str] = &[

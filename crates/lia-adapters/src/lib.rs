@@ -547,13 +547,17 @@ mod tests {
             secret_key_hex: Some(secret),
             key_id: Some("lia-test".into()),
         };
+        // Distinct wire ids so we can prove they survive into the signed journal row.
+        const SESS: &str = "child-SESS-v3";
+        const PARENT: &str = "parent-SESS-v3";
+        const AGENT: &str = "agent-XYZ-v3";
         let raw = serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "Task",
             "tool_input": {"prompt": "child work", "subagent_type": "explore"},
-            "session_id": "child-sess",
-            "parent_session_id": "parent-sess",
-            "agent_id": "agent-42",
+            "session_id": SESS,
+            "parent_session_id": PARENT,
+            "agent_id": AGENT,
             "cwd": root.path().to_string_lossy(),
         })
         .to_string();
@@ -573,21 +577,48 @@ mod tests {
         assert!(rec.get("signature_hex").is_some());
         let detail = rec.get("detail").and_then(|v| v.as_str()).unwrap_or("");
         assert!(
-            detail.contains("spawn_agent") || detail.contains("explore"),
-            "detail should mention spawn: {detail}"
+            detail.contains(&format!("session_id={SESS}")),
+            "journal receipt detail must carry session_id: {detail}"
         );
+        assert!(
+            detail.contains(&format!("parent_session_id={PARENT}")),
+            "journal receipt detail must carry parent_session_id: {detail}"
+        );
+        assert!(
+            detail.contains(&format!("agent_id={AGENT}")),
+            "journal receipt detail must carry agent_id: {detail}"
+        );
+
         // Offline verify chain.
         lia_journal::verify_chain(&journal_path).expect("verify chain");
+
+        // Reload signed rows from the DB — linkage must be recoverable offline, not only
+        // in the in-memory receipt mirror.
+        let journal = lia_journal::Journal::open(&journal_path).expect("open journal");
+        let rows = journal.load_rows().expect("load rows");
+        let mut found_linkage = false;
+        for row in &rows {
+            let event_json = serde_json::to_string(&row.event).unwrap_or_default();
+            if event_json.contains("spawn-agent") || event_json.contains("SPAWN_ALLOWED") {
+                assert!(
+                    event_json.contains(SESS) && event_json.contains(PARENT) && event_json.contains(AGENT),
+                    "persisted GateVerdict event must embed wire ids; event={event_json}"
+                );
+                found_linkage = true;
+            }
+        }
+        assert!(
+            found_linkage,
+            "expected at least one spawn-agent journal row with linkage ids"
+        );
+
         let outcome = d
             .outcomes
             .iter()
             .find(|o| o.gate_id == "spawn-agent")
             .expect("spawn outcome");
-        assert!(outcome
-            .detail
-            .as_deref()
-            .unwrap_or("")
-            .contains("spawn_agent"));
+        let od = outcome.detail.as_deref().unwrap_or("");
+        assert!(od.contains(SESS) && od.contains(PARENT) && od.contains(AGENT), "{od}");
     }
 
     #[test]

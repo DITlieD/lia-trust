@@ -143,8 +143,9 @@ fn spawn_hook_allow_and_deny_with_signed_journal() {
         "hook_event_name": "PreToolUse",
         "tool_name": "Task",
         "tool_input": {"prompt": "explore", "subagent_type": "explore"},
-        "session_id": "s-child",
-        "parent_session_id": "s-parent",
+        "session_id": "s-child-LINK",
+        "parent_session_id": "s-parent-LINK",
+        "agent_id": "agent-LINK-1",
         "cwd": root.to_string_lossy(),
     })
     .to_string();
@@ -249,6 +250,28 @@ fn spawn_hook_allow_and_deny_with_signed_journal() {
         verify.status.success(),
         "journal-verify: {}",
         String::from_utf8_lossy(&verify.stderr)
+    );
+
+    // V3-11: parent/child/agent ids must be recoverable from the signed journal DB
+    // (GateVerdict.detail), not only hashed into evidence_sha256.
+    let journal_h = lia_journal::Journal::open(&journal).expect("open journal");
+    let rows = journal_h.load_rows().expect("load rows");
+    let mut saw_allow_with_linkage = false;
+    for row in &rows {
+        let event_json = serde_json::to_string(&row.event).unwrap_or_default();
+        if event_json.contains("SPAWN_ALLOWED") {
+            assert!(
+                event_json.contains("s-child-LINK")
+                    && event_json.contains("s-parent-LINK")
+                    && event_json.contains("agent-LINK-1"),
+                "SPAWN_ALLOWED row missing linkage ids: {event_json}"
+            );
+            saw_allow_with_linkage = true;
+        }
+    }
+    assert!(
+        saw_allow_with_linkage,
+        "expected SPAWN_ALLOWED row with parent/child linkage in journal"
     );
 }
 

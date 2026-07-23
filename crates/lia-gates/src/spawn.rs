@@ -46,15 +46,23 @@ pub fn check_spawn_agent(
         "cwd": request.payload.cwd,
     });
 
+    // Human- and journal-recoverable linkage (V3-11): ids must appear in GateVerdict
+    // detail, not only inside evidence_sha256 of the evidence blob.
+    let detail = spawn_detail_line(
+        policy.allow,
+        &agent_type,
+        session_id.as_deref(),
+        parent_session_id.as_deref(),
+        agent_id.as_deref(),
+    );
+
     if policy.allow {
         Ok(make_outcome(
             request,
             Verdict::Allow,
             "SPAWN_ALLOWED",
             RiskTier::Productivity,
-            Some(format!(
-                "spawn_agent allowed (agent_type={agent_type}); child tools not automatically mediated"
-            )),
+            Some(detail),
             None,
             &evidence,
         ))
@@ -64,13 +72,28 @@ pub fn check_spawn_agent(
             Verdict::Deny,
             "SPAWN_DENIED",
             RiskTier::Security,
-            Some(format!(
-                "spawn_agent denied by spawn_policy (agent_type={agent_type})"
-            )),
+            Some(detail),
             Some(agent_type),
             &evidence,
         ))
     }
+}
+
+/// Stable journal/operator detail for spawn decisions, including parent/child linkage.
+pub fn spawn_detail_line(
+    allow: bool,
+    agent_type: &str,
+    session_id: Option<&str>,
+    parent_session_id: Option<&str>,
+    agent_id: Option<&str>,
+) -> String {
+    let verb = if allow { "allowed" } else { "denied by spawn_policy" };
+    let session = session_id.unwrap_or("-");
+    let parent = parent_session_id.unwrap_or("-");
+    let agent = agent_id.unwrap_or("-");
+    format!(
+        "spawn_agent {verb} (agent_type={agent_type}; session_id={session}; parent_session_id={parent}; agent_id={agent}); child tools not automatically mediated"
+    )
 }
 
 #[cfg(test)]
@@ -134,5 +157,26 @@ mod tests {
         c.spawn_policy = None;
         let out = check_spawn_agent(&req(), &c).unwrap();
         assert_eq!(out.reason_code, "SPAWN_ALLOWED");
+    }
+
+    #[test]
+    fn detail_embeds_parent_child_and_agent_ids() {
+        let out = check_spawn_agent(&req(), &cfg(true)).unwrap();
+        let detail = out.detail.expect("detail");
+        assert!(detail.contains("session_id=child-1"), "{detail}");
+        assert!(detail.contains("parent_session_id=parent-0"), "{detail}");
+        assert!(detail.contains("agent_id=agent-9"), "{detail}");
+        assert!(detail.contains("agent_type=explore"), "{detail}");
+        assert!(detail.contains("spawn_agent allowed"), "{detail}");
+    }
+
+    #[test]
+    fn deny_detail_also_embeds_linkage_ids() {
+        let out = check_spawn_agent(&req(), &cfg(false)).unwrap();
+        let detail = out.detail.expect("detail");
+        assert!(detail.contains("parent_session_id=parent-0"), "{detail}");
+        assert!(detail.contains("session_id=child-1"), "{detail}");
+        assert!(detail.contains("agent_id=agent-9"), "{detail}");
+        assert!(detail.contains("denied"), "{detail}");
     }
 }
