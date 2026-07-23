@@ -7,7 +7,7 @@ agent visibility, and MCP matcher honesty — target public `v0.3.0`.
 
 → **Plan:** [`docs/V3-IMPROVEMENT-PLAN.md`](V3-IMPROVEMENT-PLAN.md)
 
-Baseline: `v0.2.2` (V2 complete + Grok envelope + install `$HOME` roots).
+Baseline: `v0.3.0` (V2 complete + Grok envelope + install `$HOME` roots).
 
 ## Shipped (Kernel install + L5 adapter paths + L6 pack)
 

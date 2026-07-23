@@ -183,7 +183,10 @@ M1: extract shared envelope normalize; golden fixtures Claude/Grok/+1; ADAPTER_P
 
 ## M6 — RELEASE 0.3.0
 
-- State: pending (version bump, package, tag, GitHub release, push)
+- State: `SHIPPED` (local package + tag; remote push/release in same commit train)
+- Workspace version `0.3.0`; `install.sh` VERSION_HINT; package_release artifacts
+- Notes: `docs/releases/v0.3.0.md`
+- Hosted IS-5: EXTERNAL/PARTIAL (billing) — non-blocking
 
 ### Ledger update post M1–M5
 
@@ -196,7 +199,7 @@ M1: extract shared envelope normalize; golden fixtures Claude/Grok/+1; ADAPTER_P
 | V3-4 | SHIPPED |
 | V3-5 | SHIPPED |
 | V3-6 | SHIPPED |
-| V3-7 | pending M6 |
+| V3-7 | SHIPPED |
 | V3-10 | PARTIAL (docs) |
 | V3-11 | SHIPPED (linkage when ids present) |
 | V3-12 | SHIPPED (key exists; false by default) |

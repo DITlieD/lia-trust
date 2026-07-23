@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-VERSION="0.2.2"
+VERSION="0.3.0"
 TAG="v${VERSION}"
 TARGET="${LIA_PACKAGE_TARGET:-x86_64-unknown-linux-gnu}"
 BUILT="${CARGO_TARGET_DIR:-$ROOT/target}/release/lia"
