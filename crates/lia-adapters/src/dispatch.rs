@@ -159,6 +159,7 @@ fn finish_dispatch(
                 "gate_id": outcome.gate_id,
                 "verdict": outcome.verdict,
                 "reason_code": outcome.reason_code,
+                "detail": outcome.detail,
             }));
         }
     }

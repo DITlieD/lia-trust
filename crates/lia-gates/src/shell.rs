@@ -341,6 +341,7 @@ mod tests {
             env: BTreeMap::from([("HOME".into(), "/home/agent".into())]),
             run_id: None,
             cleanup_policy: None,
+            spawn_policy: None,
         }
     }
 

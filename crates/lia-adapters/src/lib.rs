@@ -6,6 +6,7 @@ mod conformance;
 mod contracts;
 mod cursor;
 mod dispatch;
+mod envelope;
 mod gemini_cli;
 mod generic;
 mod install;
@@ -19,8 +20,12 @@ pub use assurance::{
     AssuranceReport, CapabilityProbe, GateAssuranceCell, GateCell,
 };
 pub use claude_code::{
-    decision_json, handle_pre_tool_stdin, map_tool_to_action, on_pre_tool, parse_pre_tool_use,
-    HookDecision, PreToolUseInput,
+    decision_json, handle_pre_tool_stdin, map_tool_to_action, on_pre_tool, parse_error_reason,
+    parse_pre_tool_use, HookDecision, PreToolUseInput,
+};
+pub use envelope::{
+    default_mediated_tools, default_unmediated_tools, normalize_pre_tool_envelope,
+    normalize_tool_name, CanonicalTool, NormalizedEnvelope, ADAPTER_PARSE_CODE,
 };
 pub use codex::{
     handle_jsonrpc, handle_jsonrpc_opt, proxy_tool_call, proxy_tool_names, serve_mcp_stdio,
@@ -51,13 +56,13 @@ pub use gemini_cli::{
 pub use generic::{admit_final_diff, wrap, WrapOptions, WrapReport};
 pub use install::{
     claude_hook_present, codex_mcp_present, cursor_hooks_present, default_claude_home,
-    default_codex_home, default_cursor_home, default_gemini_home, default_lia_home,
+    default_codex_home, default_cursor_home, default_gemini_home, default_lia_home, doctor,
     gemini_hook_present, install, looks_like_live_user_home, merge_claude_settings,
     merge_codex_toml, merge_cursor_hooks, merge_gemini_settings, status, uninstall,
     unmerge_claude_settings, unmerge_codex_toml, unmerge_cursor_hooks, unmerge_gemini_settings,
-    InstallError, InstallPaths, InstallReport, InstallRequest, KernelBoundary,
-    CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER, GEMINI_BEFORETOOL_MATCHER, LIA_HOOK_MARKER,
-    MANIFEST_NAME,
+    DoctorCheck, DoctorReport, InstallError, InstallPaths, InstallReport, InstallRequest,
+    KernelBoundary, CLAUDE_PRETOOL_MATCHER, CODEX_MCP_SERVER, GEMINI_BEFORETOOL_MATCHER,
+    KERNEL_VERSION, LIA_HOOK_MARKER, MANIFEST_NAME,
 };
 pub use mcp_inspection::{
     handle_inspection_call, inspection_tool_names, load_probe, refuse_mutation, DenialRecord,
@@ -90,6 +95,9 @@ pub enum AdapterError {
     Journal(#[from] lia_journal::JournalError),
     #[error("invalid action: {0}")]
     Invalid(String),
+    /// Envelope/tool parse failure — operator-distinguishable from FS/SHELL policy denials.
+    #[error("ADAPTER_PARSE: {0}")]
+    Parse(String),
 }
 
 impl From<dispatch::DispatchError> for AdapterError {
@@ -154,6 +162,7 @@ mod tests {
             env: BTreeMap::new(),
             run_id: None,
             cleanup_policy: None,
+            spawn_policy: None,
         }
     }
 
@@ -393,16 +402,192 @@ mod tests {
         assert_eq!(decision.permission_decision, "deny");
     }
 
-    /// Completely missing tool name still errors (fail-closed parse).
+    /// Completely missing tool name still errors (fail-closed parse) with ADAPTER_PARSE.
     #[test]
     fn grok_missing_tool_name_still_errors() {
         let err = parse_pre_tool_use(r#"{"hookEventName":"pre_tool_use","toolInput":{}}"#)
             .expect_err("must fail closed without tool name");
         let msg = err.to_string();
         assert!(
-            msg.contains("missing tool_name"),
+            msg.contains(ADAPTER_PARSE_CODE) && msg.contains("missing tool_name"),
             "unexpected error: {msg}"
         );
+    }
+
+    #[test]
+    fn adapter_parse_distinct_from_policy_deny_reason() {
+        // Parse failure message carries ADAPTER_PARSE; FS OOS deny does not.
+        let parse_err = parse_pre_tool_use("{").expect_err("bad json");
+        assert!(parse_err.to_string().starts_with(ADAPTER_PARSE_CODE));
+
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "read_file",
+            "toolInput": {"target_file": "/etc/passwd"},
+            "hookEventName": "pre_tool_use",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "deny");
+        assert!(
+            !decision.permission_decision_reason.contains(ADAPTER_PARSE_CODE),
+            "policy deny must not look like parse: {}",
+            decision.permission_decision_reason
+        );
+        assert!(
+            decision.permission_decision_reason.contains("FS_")
+                || decision
+                    .dispatch
+                    .as_ref()
+                    .map(|d| d.outcomes.iter().any(|o| o.reason_code.starts_with("FS_")))
+                    .unwrap_or(false),
+            "expected FS policy signal: {}",
+            decision.permission_decision_reason
+        );
+    }
+
+    #[test]
+    fn cursor_shell_envelope_allows_in_scope_via_shared_tool_map() {
+        // ≥1 non-Claude/Grok harness alias on shared normalize path.
+        assert_eq!(
+            normalize_tool_name("run_shell_command"),
+            CanonicalTool::Bash
+        );
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "run_shell_command",
+            "tool_input": {"command": format!("ls {}", root.path().display())},
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+    }
+
+    #[test]
+    fn spawn_subagent_allow_default_policy() {
+        let root = tempfile::tempdir().unwrap();
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "toolName": "spawn_subagent",
+            "toolInput": {"prompt": "explore the tree", "subagent_type": "explore"},
+            "hookEventName": "pre_tool_use",
+            "sessionId": "parent-sess",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+        let d = decision.dispatch.expect("dispatch");
+        assert!(d
+            .outcomes
+            .iter()
+            .any(|o| o.gate_id == "spawn-agent" && o.reason_code == "SPAWN_ALLOWED"));
+    }
+
+    #[test]
+    fn spawn_task_deny_under_policy() {
+        let root = tempfile::tempdir().unwrap();
+        let mut config = cfg(root.path().to_path_buf());
+        config.spawn_policy = Some(lia_gates::SpawnPolicy { allow: false });
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config,
+            journal_path: None,
+            secret_key_hex: None,
+            key_id: None,
+        };
+        let raw = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Task",
+            "tool_input": {"prompt": "do work", "subagent_type": "general-purpose"},
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "deny");
+        let d = decision.dispatch.expect("dispatch");
+        assert!(d
+            .outcomes
+            .iter()
+            .any(|o| o.gate_id == "spawn-agent" && o.reason_code == "SPAWN_DENIED"));
+    }
+
+    #[test]
+    fn spawn_allow_writes_signed_journal_row_with_linkage() {
+        let root = tempfile::tempdir().unwrap();
+        let journal_path = root.path().join("j.db");
+        let secret = lia_journal::random_secret_hex().expect("secret");
+        let ctx = RunContext {
+            run_id: Uuid::new_v4(),
+            config: cfg(root.path().to_path_buf()),
+            journal_path: Some(journal_path.clone()),
+            secret_key_hex: Some(secret),
+            key_id: Some("lia-test".into()),
+        };
+        let raw = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Task",
+            "tool_input": {"prompt": "child work", "subagent_type": "explore"},
+            "session_id": "child-sess",
+            "parent_session_id": "parent-sess",
+            "agent_id": "agent-42",
+            "cwd": root.path().to_string_lossy(),
+        })
+        .to_string();
+        let (decision, _) = on_pre_tool(&raw, &ctx).expect("hook");
+        assert_eq!(decision.permission_decision, "allow");
+        let d = decision.dispatch.expect("dispatch");
+        assert!(!d.journal_receipts.is_empty());
+        let rec = d
+            .journal_receipts
+            .iter()
+            .find(|r| r.get("gate_id").and_then(|v| v.as_str()) == Some("spawn-agent"))
+            .expect("spawn-agent journal receipt");
+        assert_eq!(
+            rec.get("reason_code").and_then(|v| v.as_str()),
+            Some("SPAWN_ALLOWED")
+        );
+        assert!(rec.get("signature_hex").is_some());
+        let detail = rec.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            detail.contains("spawn_agent") || detail.contains("explore"),
+            "detail should mention spawn: {detail}"
+        );
+        // Offline verify chain.
+        lia_journal::verify_chain(&journal_path).expect("verify chain");
+        let outcome = d
+            .outcomes
+            .iter()
+            .find(|o| o.gate_id == "spawn-agent")
+            .expect("spawn outcome");
+        assert!(outcome
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("spawn_agent"));
     }
 
     #[test]

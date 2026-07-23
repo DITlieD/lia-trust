@@ -140,26 +140,65 @@ M1: extract shared envelope normalize; golden fixtures Claude/Grok/+1; ADAPTER_P
 
 ---
 
-## M1 — ENVELOPE (filled on implement)
+## M1 — ENVELOPE
 
-- State: pending
+- State: `SHIPPED`
+- Module: `crates/lia-adapters/src/envelope.rs` shared by Claude/Grok path
+- Fixtures: Claude snake_case, Grok camelCase, Cursor/Gemini shell alias (`run_shell_command`)
+- Parse signal: `AdapterError::Parse` → operator string `ADAPTER_PARSE: …` (distinct from FS_/SHELL_)
+- Tests: unit + CLI `v3_doctor_spawn::grok_envelope_home_allow_oos_deny_via_hook`
 
-## M2 — DOCTOR / INSTALL (filled on implement)
+## M2 — DOCTOR / INSTALL
 
-- State: pending
+- State: `SHIPPED`
+- `lia doctor` exits non-zero on error checks (binary/manifest/roots/hooks/envelope)
+- `lia status` lists mediated vs known-unmediated tools
+- `--union-roots` merges explicit roots with prior config
+- Reinstall preserves roots (0.2.2) retained
+- Grok first-class row in `docs/harness-compatibility.md`
+- Tests: install unit + CLI doctor smoke
 
-## M3 — SPAWN GATE (filled on implement)
+## M3 — SPAWN GATE
 
-- State: pending
+- State: `SHIPPED`
+- `ActionKind::SpawnAgent`, gate id `spawn-agent`, reasons `SPAWN_ALLOWED` / `SPAWN_DENIED`
+- Config `spawn_policy.allow` (default true)
+- Matcher includes `Task|Agent`; wire aliases Task/Agent/spawn_subagent/SubagentStart
+- Signed journal via normal dispatch path; offline verify
+- Tests: unit + CLI allow/deny + journal-verify
 
-## M4 — CHILD MEDIATION (filled on implement)
+## M4 — CHILD MEDIATION
 
-- State: pending
+- State: `PARTIAL` (honest)
+- Child PreToolUse documented per harness (yes/no/**unknown**) in handoff matrix + harness-compatibility
+- Parent/child ids (`session_id`, `parent_session_id`, `agent_id`) captured on payload + spawn evidence/detail
+- Probe keys added (default false): `grok_envelope`, `subagent_spawn_gate`, `subagent_child_tools`, `matcher_profile`; `subagent_visibility` remains false without measured child-tool proof
+- Full subagent PREVENT **not** claimed
 
-## M5 — MATCHER / MCP (filled on implement or DEFERRED)
+## M5 — MATCHER / MCP
 
-- State: pending
+- State: **DEFERRED** (Ledger C stretch)
+- `broad` / `strict-mcp` matcher profiles and MCP mutate policy not shipped in 0.3.0
+- Default profile expanded only for Task/Agent (spawn); document DEFERRED here
 
-## M6 — RELEASE 0.3.0 (filled on implement)
+## M6 — RELEASE 0.3.0
 
-- State: pending
+- State: pending (version bump, package, tag, GitHub release, push)
+
+### Ledger update post M1–M5
+
+| ID | Status |
+|----|--------|
+| V3-0 | SHIPPED |
+| V3-1 | SHIPPED |
+| V3-2 | SHIPPED |
+| V3-3 | SHIPPED |
+| V3-4 | SHIPPED |
+| V3-5 | SHIPPED |
+| V3-6 | SHIPPED |
+| V3-7 | pending M6 |
+| V3-10 | PARTIAL (docs) |
+| V3-11 | SHIPPED (linkage when ids present) |
+| V3-12 | SHIPPED (key exists; false by default) |
+| V3-13 | DEFERRED / PARTIAL |
+| V3-20..22 | DEFERRED |

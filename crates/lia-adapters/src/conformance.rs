@@ -187,6 +187,7 @@ fn temp_cfg() -> Result<(tempfile::TempDir, GateConfig), AdapterError> {
         env: BTreeMap::from([("HOME".into(), "/home/agent".into())]),
         run_id: None,
         cleanup_policy: None,
+        spawn_policy: None,
     };
     Ok((dir, cfg))
 }

@@ -18,6 +18,7 @@ mod filesystem;
 mod journal_tamper;
 mod secret;
 mod shell;
+mod spawn;
 mod test_integrity;
 
 pub use dependency::check_dependency_reality;
@@ -27,6 +28,7 @@ pub use filesystem::check_filesystem_scope;
 pub use journal_tamper::check_journal_tamper;
 pub use secret::{check_secret_output, ShareableProjection};
 pub use shell::check_shell_irreversible;
+pub use spawn::check_spawn_agent;
 pub use test_integrity::check_test_integrity;
 
 pub const CORE_GATE_IDS: &[&str] = &[
@@ -38,6 +40,13 @@ pub const CORE_GATE_IDS: &[&str] = &[
     "secret-output",
     "journal-tamper",
 ];
+
+/// Additional gate ids beyond the seven core gates (V3 spawn GATE).
+pub const EXTRA_GATE_IDS: &[&str] = &["spawn-agent"];
+
+fn is_known_gate_id(gate_id: &str) -> bool {
+    CORE_GATE_IDS.contains(&gate_id) || EXTRA_GATE_IDS.contains(&gate_id)
+}
 
 pub const GATE_REASON_CODES: &[&str] = &[
     "DEP_NOT_FOUND",
@@ -61,6 +70,8 @@ pub const GATE_REASON_CODES: &[&str] = &[
     "SHELL_DESTRUCTIVE",
     "SHELL_OUT_OF_SCOPE",
     "SHELL_PROTECTED_PATH",
+    "SPAWN_ALLOWED",
+    "SPAWN_DENIED",
     "TEST_FABRICATED_PASS",
     "TEST_INTEGRITY_OK",
     "TEST_MISSING_HL4_FIELDS",
@@ -101,6 +112,9 @@ pub struct GateConfig {
     pub run_id: Option<Uuid>,
     #[serde(default)]
     pub cleanup_policy: Option<CleanupPolicy>,
+    /// V3 spawn GATE: default allow + journal when absent.
+    #[serde(default)]
+    pub spawn_policy: Option<SpawnPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +122,25 @@ pub struct GateConfig {
 pub struct CleanupPolicy {
     pub version: u32,
     pub approved_targets: Vec<PathBuf>,
+}
+
+/// Policy for Task / spawn_subagent mediation (V3-A).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpawnPolicy {
+    /// When true (default), spawn is allowed and journaled. When false, deny.
+    #[serde(default = "default_spawn_allow")]
+    pub allow: bool,
+}
+
+fn default_spawn_allow() -> bool {
+    true
+}
+
+impl Default for SpawnPolicy {
+    fn default() -> Self {
+        Self { allow: true }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -168,6 +201,21 @@ pub struct GatePayload {
     /// Optional caller-supplied flow graph checked in addition to write admission.
     #[serde(default)]
     pub taint_graph: Option<serde_json::Value>,
+    /// Parent session id when harness provides parent/child linkage (V3-C).
+    #[serde(default)]
+    pub parent_session_id: Option<String>,
+    /// Child / agent id when present on the wire.
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    /// Session id of the current agent context.
+    #[serde(default)]
+    pub session_id: Option<String>,
+    /// Spawn agent type / subagent_type when provided.
+    #[serde(default)]
+    pub spawn_agent_type: Option<String>,
+    /// Human action label for journal clarity (e.g. spawn_agent).
+    #[serde(default)]
+    pub action_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -226,7 +274,7 @@ pub fn load_core_rules(path: impl AsRef<Path>) -> Result<FrozenPolicy, GateError
 }
 
 pub fn evaluate_gate(request: &GateRequest, config: &GateConfig) -> Result<GateOutcome, GateError> {
-    if !CORE_GATE_IDS.contains(&request.gate_id.as_str()) {
+    if !is_known_gate_id(request.gate_id.as_str()) {
         return Err(GateError::UnknownGate(request.gate_id.clone()));
     }
     let outcome = match request.gate_id.as_str() {
@@ -237,6 +285,7 @@ pub fn evaluate_gate(request: &GateRequest, config: &GateConfig) -> Result<GateO
         "dependency-reality" => check_dependency_reality(request, config)?,
         "secret-output" => check_secret_output(request)?,
         "journal-tamper" => check_journal_tamper(request, config)?,
+        "spawn-agent" => check_spawn_agent(request, config)?,
         other => return Err(GateError::UnknownGate(other.to_string())),
     };
     validate_gate_reason_code(&outcome.reason_code)?;
@@ -270,6 +319,7 @@ pub fn evaluate_action_gates(
             gate_ids.push("shell-irreversible");
         }
         ActionKind::AddDependency => gate_ids.push("dependency-reality"),
+        ActionKind::SpawnAgent => gate_ids.push("spawn-agent"),
         ActionKind::Other | ActionKind::Network => {}
     }
     if payload.text.is_some() {

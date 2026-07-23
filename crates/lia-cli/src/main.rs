@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use lia_adapters::{
     assert_adapter, collect_registry_evidence, credential_read, default_claude_home,
     default_codex_home, default_cursor_home, default_gemini_home, default_lia_home,
-    evaluate_generic_action, evaluate_named_gate, handle_cursor_mcp_stdin,
+    doctor as install_doctor, evaluate_generic_action, evaluate_named_gate, handle_cursor_mcp_stdin,
     handle_cursor_shell_stdin, handle_gemini_before_tool_stdin, handle_jsonrpc,
     handle_pre_tool_stdin, install as install_kernel, internal_confined_exec, known_adapters,
     load_and_validate_process_contract, looks_like_live_user_home, report_for_adapter,
@@ -475,11 +475,32 @@ enum Commands {
         apply_live: bool,
         #[arg(long)]
         allowed_root: Vec<PathBuf>,
+        /// Union explicit `--allowed-root` with prior config roots (do not shrink).
+        #[arg(long, default_value_t = false)]
+        union_roots: bool,
         #[arg(long, default_value_t = false)]
         json: bool,
     },
     /// Report whether LIA is installed on Claude Code / Codex configs.
     Status {
+        #[arg(long)]
+        lia_home: Option<PathBuf>,
+        #[arg(long)]
+        lia_bin: Option<PathBuf>,
+        #[arg(long)]
+        claude_home: Option<PathBuf>,
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+        #[arg(long)]
+        gemini_home: Option<PathBuf>,
+        #[arg(long)]
+        cursor_home: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Diagnose install health: roots, hooks, binary skew, envelope self-test.
+    /// Exits non-zero when error-severity checks fail.
+    Doctor {
         #[arg(long)]
         lia_home: Option<PathBuf>,
         #[arg(long)]
@@ -538,6 +559,7 @@ struct InstallRequestArgs {
     dry_run: bool,
     apply_live: bool,
     allowed_root: Vec<PathBuf>,
+    union_roots: bool,
 }
 
 struct RegistryCommandArgs {
@@ -1117,6 +1139,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             dry_run,
             apply_live,
             allowed_root,
+            union_roots,
             json,
         } => run_install(
             InstallRequestArgs {
@@ -1129,6 +1152,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 dry_run,
                 apply_live,
                 allowed_root,
+                union_roots,
             },
             json,
         ),
@@ -1141,6 +1165,23 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             cursor_home,
             json,
         } => run_install_status(
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            gemini_home,
+            cursor_home,
+            json,
+        ),
+        Commands::Doctor {
+            lia_home,
+            lia_bin,
+            claude_home,
+            codex_home,
+            gemini_home,
+            cursor_home,
+            json,
+        } => run_doctor(
             lia_home,
             lia_bin,
             claude_home,
@@ -1170,6 +1211,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 dry_run,
                 apply_live,
                 allowed_root: Vec::new(),
+                union_roots: false,
             },
             json,
         ),
@@ -1199,6 +1241,7 @@ fn build_install_request(
         dry_run,
         apply_live,
         allowed_root,
+        union_roots,
     } = args;
     let claude_home = claude_home.unwrap_or_else(default_claude_home);
     let codex_home = codex_home.unwrap_or_else(default_codex_home);
@@ -1224,6 +1267,7 @@ fn build_install_request(
         dry_run,
         apply_live,
         allowed_roots: allowed_root,
+        union_roots,
     })
 }
 
@@ -1254,6 +1298,12 @@ fn emit_install_report(
         println!("cannot_observe:");
         for e in &report.kernel.cannot_observe {
             println!("  - {e}");
+        }
+        if !report.mediated_tools.is_empty() {
+            println!("mediated_tools: {}", report.mediated_tools.join(", "));
+        }
+        if !report.unmediated_tools.is_empty() {
+            println!("unmediated_tools: {}", report.unmediated_tools.join(", "));
         }
         for n in &report.notes {
             println!("note: {n}");
@@ -1290,9 +1340,59 @@ fn run_install_status(
         dry_run: false,
         apply_live: false,
         allowed_roots: vec![],
+        union_roots: false,
     };
     let report = install_status(&req).map_err(|e| e.to_string())?;
     emit_install_report(&report, json)
+}
+
+fn run_doctor(
+    lia_home: Option<PathBuf>,
+    lia_bin: Option<PathBuf>,
+    claude_home: Option<PathBuf>,
+    codex_home: Option<PathBuf>,
+    gemini_home: Option<PathBuf>,
+    cursor_home: Option<PathBuf>,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let req = InstallRequest {
+        lia_home: lia_home.unwrap_or_else(default_lia_home),
+        lia_bin: resolve_lia_bin(lia_bin)?,
+        claude_home: claude_home.unwrap_or_else(default_claude_home),
+        codex_home: codex_home.unwrap_or_else(default_codex_home),
+        gemini_home: gemini_home.unwrap_or_else(default_gemini_home),
+        cursor_home: cursor_home.unwrap_or_else(default_cursor_home),
+        dry_run: false,
+        apply_live: false,
+        allowed_roots: vec![],
+        union_roots: false,
+    };
+    let report = install_doctor(&req).map_err(|e| e.to_string())?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("doctor: {}", if report.ok { "OK" } else { "FAILED" });
+        println!("kernel_version: {}", report.kernel_version);
+        println!("lia_home: {}", report.lia_home.display());
+        println!("lia_bin: {}", report.lia_bin.display());
+        if !report.allowed_roots.is_empty() {
+            println!("allowed_roots: {}", report.allowed_roots.join(", "));
+        }
+        for c in &report.checks {
+            let mark = if c.ok { "ok" } else { "FAIL" };
+            println!("[{mark}] {} ({}): {}", c.id, c.severity, c.message);
+        }
+        println!("mediated_tools: {}", report.mediated_tools.join(", "));
+        println!("unmediated_tools: {}", report.unmediated_tools.join(", "));
+        for n in &report.notes {
+            println!("note: {n}");
+        }
+    }
+    if report.ok {
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::FAILURE)
+    }
 }
 
 fn run_uninstall(
@@ -1823,6 +1923,7 @@ fn run_mcp(args: McpCommandArgs) -> Result<ExitCode, Box<dyn std::error::Error>>
             env: Default::default(),
             run_id: None,
             cleanup_policy: None,
+            spawn_policy: None,
         },
     };
     let run_id = run_id.or(cfg.run_id).unwrap_or_else(Uuid::new_v4);

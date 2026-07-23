@@ -62,6 +62,14 @@ pub const CAP_COMPLETION_GATE: &str = "completion_gate";
 pub const CAP_SUBAGENT_VISIBILITY: &str = "subagent_visibility";
 pub const CAP_IMMUTABLE_JOURNAL: &str = "immutable_journal";
 pub const CAP_OFFLINE_VERIFICATION: &str = "offline_verification";
+/// V3 probe: multi-envelope Grok/Claude path exercised (not a PREVENT claim).
+pub const CAP_GROK_ENVELOPE: &str = "grok_envelope";
+/// V3 probe: spawn gate path present (allow/deny under policy).
+pub const CAP_SUBAGENT_SPAWN_GATE: &str = "subagent_spawn_gate";
+/// V3 probe: child-tool PreToolUse proven — remain false without measured harness proof.
+pub const CAP_SUBAGENT_CHILD_TOOLS: &str = "subagent_child_tools";
+/// V3 probe: matcher profile other than default is active.
+pub const CAP_MATCHER_PROFILE: &str = "matcher_profile";
 
 pub const ALL_CAPABILITY_KEYS: &[&str] = &[
     CAP_PRE_WRITE_BLOCK,
@@ -74,6 +82,10 @@ pub const ALL_CAPABILITY_KEYS: &[&str] = &[
     CAP_SUBAGENT_VISIBILITY,
     CAP_IMMUTABLE_JOURNAL,
     CAP_OFFLINE_VERIFICATION,
+    CAP_GROK_ENVELOPE,
+    CAP_SUBAGENT_SPAWN_GATE,
+    CAP_SUBAGENT_CHILD_TOOLS,
+    CAP_MATCHER_PROFILE,
 ];
 
 pub const ADAPTER_CLAUDE_CODE: &str = "claude-code";

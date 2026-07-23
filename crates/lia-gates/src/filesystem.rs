@@ -161,6 +161,7 @@ mod tests {
             env: BTreeMap::new(),
             run_id: None,
             cleanup_policy: None,
+            spawn_policy: None,
         }
     }
 

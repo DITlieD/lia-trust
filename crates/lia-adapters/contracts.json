@@ -124,13 +124,15 @@
     "default_max_cache_age_seconds": 86400
   },
   "kernel_install": {
-    "cli": ["install", "status", "uninstall"],
+    "cli": ["install", "status", "doctor", "uninstall"],
     "lia_home_env": "LIA_HOME",
     "default_lia_home": "~/.lia-trust",
     "state_layout": ["keys/signing.hex", "journal/default.db", "config.json", "bin/claude-pretool.sh", "bin/codex-mcp.sh", "bin/gemini-beforetool.sh", "bin/cursor-before-shell.sh", "bin/cursor-before-mcp.sh", "install-manifest.json", "probe.json"],
     "live_home_guard": "--apply-live required for real ~/.claude, ~/.codex, ~/.gemini, and ~/.cursor",
     "assurance": "GATE",
-    "forbid_confine_v1": true
+    "forbid_confine_v1": true,
+    "matcher_default": "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit|Task|Agent",
+    "spawn_policy_default": { "allow": true }
   },
   "capability_keys": [
     "pre_write_block",
@@ -142,7 +144,11 @@
     "completion_gate",
     "subagent_visibility",
     "immutable_journal",
-    "offline_verification"
+    "offline_verification",
+    "grok_envelope",
+    "subagent_spawn_gate",
+    "subagent_child_tools",
+    "matcher_profile"
   ],
   "assurance_levels": ["AUDIT", "OBSERVE", "GATE", "CONFINE"],
   "gate_cells": ["PREVENT", "DETECT", "CANNOT-OBSERVE"],

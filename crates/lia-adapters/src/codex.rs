@@ -446,6 +446,7 @@ mod tests {
                 env: BTreeMap::new(),
                 run_id: None,
                 cleanup_policy: None,
+                spawn_policy: None,
             },
             journal_path: None,
             secret_key_hex: None,

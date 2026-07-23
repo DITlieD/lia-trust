@@ -15,11 +15,14 @@ use thiserror::Error;
 pub const LIA_HOOK_MARKER: &str = "lia-trust-kernel";
 /// Codex MCP server table name.
 pub const CODEX_MCP_SERVER: &str = "lia-trust";
-/// Claude PreToolUse matcher covering gated tools.
-pub const CLAUDE_PRETOOL_MATCHER: &str = "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit";
+/// Claude PreToolUse matcher covering gated tools (includes Task/Agent for V3 spawn GATE).
+pub const CLAUDE_PRETOOL_MATCHER: &str =
+    "Bash|Write|Edit|Read|Delete|MultiEdit|NotebookEdit|Task|Agent";
 pub const GEMINI_BEFORETOOL_MATCHER: &str = "^(run_shell_command|write_file|replace|read_file)$";
 /// Install manifest filename under lia home.
 pub const MANIFEST_NAME: &str = "install-manifest.json";
+/// Binary version string expected in doctor skew checks (`lia --version` form without prefix).
+pub const KERNEL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Error)]
 pub enum InstallError {
@@ -65,7 +68,28 @@ pub struct InstallReport {
     pub cursor_hooks_installed: bool,
     pub kernel: KernelBoundary,
     pub notes: Vec<String>,
+    /// Tools LIA matchers/proxies can see under the default install profile.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mediated_tools: Vec<String>,
+    /// Known common tools that do not hit LIA under default matchers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmediated_tools: Vec<String>,
 }
+
+fn mediation_lists() -> (Vec<String>, Vec<String>) {
+    (
+        crate::envelope::default_mediated_tools()
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+        crate::envelope::default_unmediated_tools()
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
+    )
+}
+
+
 
 /// What Kernel means as product TCB (not commercial Harness/Canvas).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,6 +141,32 @@ pub struct InstallRequest {
     /// without an explicit apply-live flag (caller enforces).
     pub apply_live: bool,
     pub allowed_roots: Vec<PathBuf>,
+    /// When true with explicit `--allowed-root`, union with prior config roots
+    /// instead of replacing them (V3 install livability).
+    pub union_roots: bool,
+}
+
+/// One doctor check result (V3 install livability).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DoctorCheck {
+    pub id: String,
+    pub ok: bool,
+    pub severity: String,
+    pub message: String,
+}
+
+/// `lia doctor` report: non-ok when any failing check has severity `error`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DoctorReport {
+    pub ok: bool,
+    pub lia_home: PathBuf,
+    pub lia_bin: PathBuf,
+    pub kernel_version: String,
+    pub checks: Vec<DoctorCheck>,
+    pub mediated_tools: Vec<String>,
+    pub unmediated_tools: Vec<String>,
+    pub allowed_roots: Vec<String>,
+    pub notes: Vec<String>,
 }
 
 impl InstallPaths {
@@ -636,17 +686,37 @@ pub fn default_gate_config_json(allowed_roots: &[PathBuf], cwd: &Path) -> Value 
         ],
         "registry": {},
         "env": {},
+        // V3: default allow spawn + journal (compat-friendly).
+        "spawn_policy": { "allow": true },
     })
 }
 
 /// Prefer explicit install roots; otherwise keep a prior config's roots so reinstall
 /// from a single repo does not shrink a broader home-scoped install.
+/// With `union_roots`, explicit roots are merged with prior roots (set-union).
 fn resolve_install_gate_config(
     allowed_roots: &[PathBuf],
     cwd: &Path,
     existing_config: Option<&Value>,
+    union_roots: bool,
 ) -> Value {
     if !allowed_roots.is_empty() {
+        if union_roots {
+            if let Some(prev) = existing_config {
+                if let Some(arr) = prev.get("allowed_roots").and_then(|v| v.as_array()) {
+                    let mut merged: Vec<PathBuf> = allowed_roots.to_vec();
+                    for v in arr {
+                        if let Some(s) = v.as_str() {
+                            let p = PathBuf::from(s);
+                            if !merged.iter().any(|m| m == &p) {
+                                merged.push(p);
+                            }
+                        }
+                    }
+                    return default_gate_config_json(&merged, cwd);
+                }
+            }
+        }
         return default_gate_config_json(allowed_roots, cwd);
     }
     if let Some(prev) = existing_config {
@@ -675,6 +745,10 @@ pub fn default_probe_json(adapter: &str) -> Value {
                 "subagent_visibility": false,
                 "immutable_journal": false,
                 "offline_verification": false,
+                "grok_envelope": false,
+                "subagent_spawn_gate": false,
+                "subagent_child_tools": false,
+                "matcher_profile": false,
             }),
             json!({
                 "test-integrity": "CANNOT-OBSERVE",
@@ -699,6 +773,10 @@ pub fn default_probe_json(adapter: &str) -> Value {
                 "subagent_visibility": false,
                 "immutable_journal": false,
                 "offline_verification": false,
+                "grok_envelope": false,
+                "subagent_spawn_gate": false,
+                "subagent_child_tools": false,
+                "matcher_profile": false,
             }),
             json!({
                 "test-integrity": "CANNOT-OBSERVE",
@@ -723,6 +801,10 @@ pub fn default_probe_json(adapter: &str) -> Value {
                 "subagent_visibility": false,
                 "immutable_journal": false,
                 "offline_verification": false,
+                "grok_envelope": false,
+                "subagent_spawn_gate": false,
+                "subagent_child_tools": false,
+                "matcher_profile": false,
             }),
             json!({
                 "test-integrity": "CANNOT-OBSERVE",
@@ -798,6 +880,7 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         &req.allowed_roots,
         &cwd,
         existing_config.as_ref(),
+        req.union_roots,
     );
     let probe = default_probe_json("claude-code");
 
@@ -827,6 +910,7 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
 
     if req.dry_run {
         notes.push("dry-run: no files written".into());
+        let (mediated_tools, unmediated_tools) = mediation_lists();
         return Ok(InstallReport {
             action: "install".into(),
             dry_run: true,
@@ -841,6 +925,8 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             cursor_hooks_installed: cursor_hooks_present(&cursor_merged),
             kernel: KernelBoundary::default(),
             notes,
+            mediated_tools,
+            unmediated_tools,
         });
     }
 
@@ -897,10 +983,12 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
 
     let manifest = json!({
         "version": 1,
+        "kernel_version": KERNEL_VERSION,
         "marker": LIA_HOOK_MARKER,
         "installed_at": chrono_now(),
         "paths": paths,
         "kernel": KernelBoundary::default(),
+        "matcher": CLAUDE_PRETOOL_MATCHER,
     });
     write_pretty_json(&paths.lia_home.join(MANIFEST_NAME), &manifest)?;
 
@@ -909,7 +997,11 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
     notes.push(format!("wrote {}", paths.gemini_settings.display()));
     notes.push(format!("wrote {}", paths.cursor_hooks.display()));
     notes.push(format!("state under {}", paths.lia_home.display()));
+    notes.push(
+        "Grok Build: Claude-compat PreToolUse path; camelCase envelopes supported".into(),
+    );
 
+    let (mediated_tools, unmediated_tools) = mediation_lists();
     Ok(InstallReport {
         action: "install".into(),
         dry_run: false,
@@ -924,6 +1016,8 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         cursor_hooks_installed: cursor_hooks_present(&cursor_merged),
         kernel: KernelBoundary::default(),
         notes,
+        mediated_tools,
+        unmediated_tools,
     })
 }
 
@@ -963,6 +1057,8 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             cursor_hooks_installed: cursor_hooks_present(&cursor_new),
             kernel: KernelBoundary::default(),
             notes,
+            mediated_tools: Vec::new(),
+            unmediated_tools: Vec::new(),
         });
     }
 
@@ -1023,6 +1119,8 @@ pub fn uninstall(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         cursor_hooks_installed: cursor_hooks_present(&cursor_new),
         kernel: KernelBoundary::default(),
         notes,
+        mediated_tools: Vec::new(),
+        unmediated_tools: Vec::new(),
     })
 }
 
@@ -1051,6 +1149,18 @@ pub fn status(req: &InstallRequest) -> Result<InstallReport, InstallError> {
             paths.lia_bin.display()
         ));
     }
+    let (mediated_tools, unmediated_tools) = mediation_lists();
+    notes.push(format!(
+        "mediated tools (default profile): {}",
+        mediated_tools.join(", ")
+    ));
+    notes.push(format!(
+        "known unmediated: {}",
+        unmediated_tools.join(", ")
+    ));
+    notes.push(
+        "Grok Build: first-class Claude-compat row; camelCase envelopes + spawn_subagent map".into(),
+    );
     Ok(InstallReport {
         action: "status".into(),
         dry_run: false,
@@ -1064,6 +1174,256 @@ pub fn status(req: &InstallRequest) -> Result<InstallReport, InstallError> {
         gemini_hook_installed: gemini_hook_present(&gemini),
         cursor_hooks_installed: cursor_hooks_present(&cursor),
         kernel: KernelBoundary::default(),
+        notes,
+        mediated_tools,
+        unmediated_tools,
+    })
+}
+
+/// Operator install livability checks (V3). Fails closed on roots/hooks/binary skew.
+pub fn doctor(req: &InstallRequest) -> Result<DoctorReport, InstallError> {
+    let paths = InstallPaths::resolve(
+        &req.lia_home,
+        &req.lia_bin,
+        &req.claude_home,
+        &req.codex_home,
+        &req.gemini_home,
+        &req.cursor_home,
+    );
+    let mut checks = Vec::new();
+    let mut notes = Vec::new();
+    let mut allowed_roots: Vec<String> = Vec::new();
+
+    // Binary exists
+    let bin_ok = paths.lia_bin.exists();
+    checks.push(DoctorCheck {
+        id: "binary_exists".into(),
+        ok: bin_ok,
+        severity: "error".into(),
+        message: if bin_ok {
+            format!("lia binary present at {}", paths.lia_bin.display())
+        } else {
+            format!("lia binary missing at {}", paths.lia_bin.display())
+        },
+    });
+
+    // Manifest
+    let manifest_path = paths.lia_home.join(MANIFEST_NAME);
+    let manifest_ok = manifest_path.exists();
+    checks.push(DoctorCheck {
+        id: "install_manifest".into(),
+        ok: manifest_ok,
+        severity: "error".into(),
+        message: if manifest_ok {
+            format!("install-manifest present at {}", manifest_path.display())
+        } else {
+            format!(
+                "install-manifest missing under {} (run lia install)",
+                paths.lia_home.display()
+            )
+        },
+    });
+
+    // Binary version vs manifest kernel_version when both present
+    if manifest_ok {
+        let man = read_json_or_empty(&manifest_path)?;
+        if let Some(mv) = man.get("kernel_version").and_then(|v| v.as_str()) {
+            let skew_ok = mv == KERNEL_VERSION;
+            checks.push(DoctorCheck {
+                id: "binary_version_skew".into(),
+                ok: skew_ok,
+                severity: if skew_ok { "info".into() } else { "error".into() },
+                message: if skew_ok {
+                    format!("binary package version {KERNEL_VERSION} matches manifest")
+                } else {
+                    format!(
+                        "binary/package version skew: running {KERNEL_VERSION}, manifest {mv}"
+                    )
+                },
+            });
+        } else {
+            notes.push("manifest lacks kernel_version (pre-0.3.0 install); reinstall recommended".into());
+        }
+    }
+
+    // Config roots
+    let config_ok = paths.config_json.exists();
+    checks.push(DoctorCheck {
+        id: "gate_config".into(),
+        ok: config_ok,
+        severity: "error".into(),
+        message: if config_ok {
+            format!("gate config present at {}", paths.config_json.display())
+        } else {
+            format!("gate config missing at {}", paths.config_json.display())
+        },
+    });
+    let mut home_in_roots = false;
+    if config_ok {
+        let cfg = read_json_or_empty(&paths.config_json)?;
+        if let Some(arr) = cfg.get("allowed_roots").and_then(|v| v.as_array()) {
+            for v in arr {
+                if let Some(s) = v.as_str() {
+                    allowed_roots.push(s.to_string());
+                }
+            }
+        }
+        if let Some(home) = dirs_home() {
+            let hs = home.display().to_string();
+            home_in_roots = allowed_roots.iter().any(|r| {
+                r == &hs || Path::new(r) == home.as_path() || hs.starts_with(r)
+            });
+        }
+        let roots_ok = !allowed_roots.is_empty();
+        checks.push(DoctorCheck {
+            id: "allowed_roots_nonempty".into(),
+            ok: roots_ok,
+            severity: "error".into(),
+            message: if roots_ok {
+                format!("allowed_roots: {}", allowed_roots.join(", "))
+            } else {
+                "allowed_roots empty — agents will false-deny almost everything".into()
+            },
+        });
+        checks.push(DoctorCheck {
+            id: "home_in_allowed_roots".into(),
+            ok: home_in_roots || dirs_home().is_none(),
+            severity: "error".into(),
+            message: if home_in_roots {
+                "$HOME is covered by allowed_roots".into()
+            } else {
+                "WARNING: $HOME is not under allowed_roots — Claude/Grok global hooks will false-deny home paths".into()
+            },
+        });
+    }
+
+    // Hook wrappers exist and reference current binary
+    let wrappers = [
+        ("claude_wrapper", &paths.claude_wrapper),
+        ("codex_wrapper", &paths.codex_wrapper),
+        ("gemini_wrapper", &paths.gemini_wrapper),
+        ("cursor_shell_wrapper", &paths.cursor_shell_wrapper),
+        ("cursor_mcp_wrapper", &paths.cursor_mcp_wrapper),
+    ];
+    for (id, path) in wrappers {
+        let exists = path.exists();
+        let mut ok = exists;
+        let mut msg = if exists {
+            format!("{} present", path.display())
+        } else {
+            format!("{} missing", path.display())
+        };
+        if exists {
+            if let Ok(body) = fs::read_to_string(path) {
+                let bin_s = paths.lia_bin.display().to_string();
+                if !body.contains(&bin_s) && !body.contains("lia") {
+                    ok = false;
+                    msg = format!(
+                        "{} does not reference lia binary path {}",
+                        path.display(),
+                        bin_s
+                    );
+                }
+            }
+        }
+        checks.push(DoctorCheck {
+            id: id.into(),
+            ok,
+            severity: "error".into(),
+            message: msg,
+        });
+    }
+
+    // Sample envelope self-test (in-process): Claude + Grok under configured roots
+    if config_ok && bin_ok {
+        match lia_gates::load_gate_config(&paths.config_json) {
+            Ok(gate_cfg) => {
+                let ctx = crate::dispatch::RunContext {
+                    run_id: uuid::Uuid::new_v4(),
+                    config: gate_cfg,
+                    journal_path: None,
+                    secret_key_hex: None,
+                    key_id: None,
+                };
+                let home = dirs_home().unwrap_or_else(|| PathBuf::from("/tmp"));
+                let sample = home.join(".lia-doctor-selftest.txt");
+                let claude_raw = serde_json::json!({
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"file_path": sample.to_string_lossy()},
+                    "cwd": home.to_string_lossy(),
+                })
+                .to_string();
+                let grok_raw = serde_json::json!({
+                    "hookEventName": "pre_tool_use",
+                    "toolName": "read_file",
+                    "toolInput": {"target_file": sample.to_string_lossy()},
+                    "cwd": home.to_string_lossy(),
+                })
+                .to_string();
+                let claude_ok = match crate::claude_code::on_pre_tool(&claude_raw, &ctx) {
+                    Ok((d, _)) => d.permission_decision == "allow",
+                    Err(_) => false,
+                };
+                let grok_ok = match crate::claude_code::on_pre_tool(&grok_raw, &ctx) {
+                    Ok((d, _)) => d.permission_decision == "allow",
+                    Err(_) => false,
+                };
+                // Only require allow when home is in roots (otherwise expect deny and still ok parse)
+                let envelope_ok = if home_in_roots {
+                    claude_ok && grok_ok
+                } else {
+                    // parse path works even if denied for scope
+                    crate::claude_code::on_pre_tool(&claude_raw, &ctx).is_ok()
+                        && crate::claude_code::on_pre_tool(&grok_raw, &ctx).is_ok()
+                };
+                checks.push(DoctorCheck {
+                    id: "envelope_selftest".into(),
+                    ok: envelope_ok,
+                    severity: if home_in_roots {
+                        "error".into()
+                    } else {
+                        "warn".into()
+                    },
+                    message: if envelope_ok {
+                        "Claude + Grok sample envelopes evaluate (self-test)".into()
+                    } else {
+                        "envelope self-test failed for Claude/Grok sample under configured roots"
+                            .into()
+                    },
+                });
+            }
+            Err(e) => {
+                checks.push(DoctorCheck {
+                    id: "envelope_selftest".into(),
+                    ok: false,
+                    severity: "error".into(),
+                    message: format!("cannot load gate config for self-test: {e}"),
+                });
+            }
+        }
+    }
+
+    let (mediated_tools, unmediated_tools) = mediation_lists();
+    let ok = checks
+        .iter()
+        .filter(|c| c.severity == "error")
+        .all(|c| c.ok);
+    if !ok {
+        notes.push("doctor FAILED — fix error checks before trusting install".into());
+    } else {
+        notes.push("doctor OK".into());
+    }
+
+    Ok(DoctorReport {
+        ok,
+        lia_home: paths.lia_home,
+        lia_bin: paths.lia_bin,
+        kernel_version: KERNEL_VERSION.into(),
+        checks,
+        mediated_tools,
+        unmediated_tools,
+        allowed_roots,
         notes,
     })
 }
@@ -1304,6 +1664,7 @@ command = "/bin/true"
             dry_run: false,
             apply_live: false,
             allowed_roots: vec![tmp.path().to_path_buf()],
+            union_roots: false,
         };
         let rep = install(&req).unwrap();
         assert!(rep.claude_hook_installed);
@@ -1360,6 +1721,7 @@ command = "/bin/true"
             dry_run: true,
             apply_live: false,
             allowed_roots: vec![],
+            union_roots: false,
         };
         let rep = install(&req).unwrap();
         assert!(rep.dry_run);
@@ -1400,7 +1762,7 @@ command = "/bin/true"
             "allowed_roots": [home.display().to_string()],
             "cwd": "/tmp/other",
         });
-        let cfg = resolve_install_gate_config(&[], Path::new("/tmp/repo"), Some(&prior));
+        let cfg = resolve_install_gate_config(&[], Path::new("/tmp/repo"), Some(&prior), false);
         let roots = cfg["allowed_roots"].as_array().unwrap();
         assert_eq!(roots.len(), 1);
         assert_eq!(roots[0].as_str().unwrap(), home.to_string_lossy());
@@ -1411,9 +1773,119 @@ command = "/bin/true"
         let prior = json!({ "allowed_roots": ["/home/agent"] });
         let explicit = vec![PathBuf::from("/tmp/only-this")];
         let cfg =
-            resolve_install_gate_config(&explicit, Path::new("/tmp/repo"), Some(&prior));
+            resolve_install_gate_config(&explicit, Path::new("/tmp/repo"), Some(&prior), false);
         let roots = cfg["allowed_roots"].as_array().unwrap();
         assert_eq!(roots.len(), 1);
         assert_eq!(roots[0].as_str().unwrap(), "/tmp/only-this");
+    }
+
+    #[test]
+    fn union_roots_merges_explicit_with_prior() {
+        let prior = json!({ "allowed_roots": ["/home/agent", "/work"] });
+        let explicit = vec![PathBuf::from("/tmp/extra")];
+        let cfg =
+            resolve_install_gate_config(&explicit, Path::new("/tmp/repo"), Some(&prior), true);
+        let roots: Vec<&str> = cfg["allowed_roots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(roots.contains(&"/tmp/extra"));
+        assert!(roots.contains(&"/home/agent"));
+        assert!(roots.contains(&"/work"));
+    }
+
+    #[test]
+    fn doctor_fails_on_missing_install() {
+        let tmp = tempdir().unwrap();
+        let bin = tmp.path().join("missing-lia");
+        let req = InstallRequest {
+            lia_home: tmp.path().join("no-home"),
+            lia_bin: bin,
+            claude_home: tmp.path().join("claude"),
+            codex_home: tmp.path().join("codex"),
+            gemini_home: tmp.path().join("gemini"),
+            cursor_home: tmp.path().join("cursor"),
+            dry_run: false,
+            apply_live: false,
+            allowed_roots: vec![],
+            union_roots: false,
+        };
+        let rep = doctor(&req).unwrap();
+        assert!(!rep.ok, "doctor must fail bad fixture: {:?}", rep.checks);
+        assert!(rep.checks.iter().any(|c| c.id == "binary_exists" && !c.ok));
+        assert!(rep
+            .checks
+            .iter()
+            .any(|c| c.id == "install_manifest" && !c.ok));
+        assert!(!rep.mediated_tools.is_empty());
+        assert!(!rep.unmediated_tools.is_empty());
+    }
+
+    #[test]
+    fn doctor_ok_on_fresh_install_with_home_root() {
+        let tmp = tempdir().unwrap();
+        let bin = tmp.path().join("lia");
+        fs::write(&bin, b"#!/bin/true\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&bin, fs::Permissions::from_mode(0o755));
+        }
+        // Include real $HOME when present so doctor home_in_roots passes without
+        // mutating process env (parallel tests share HOME).
+        let mut roots = vec![tmp.path().to_path_buf()];
+        if let Some(home) = dirs_home() {
+            roots.push(home);
+        }
+        let req = InstallRequest {
+            lia_home: tmp.path().join("lia-home"),
+            lia_bin: bin.clone(),
+            claude_home: tmp.path().join("claude"),
+            codex_home: tmp.path().join("codex"),
+            gemini_home: tmp.path().join("gemini"),
+            cursor_home: tmp.path().join("cursor"),
+            dry_run: false,
+            apply_live: false,
+            allowed_roots: roots,
+            union_roots: false,
+        };
+        install(&req).unwrap();
+        let rep = doctor(&req).unwrap();
+        assert!(rep.ok, "doctor should pass clean install: {:?}", rep.checks);
+        assert!(rep.checks.iter().all(|c| c.ok || c.severity != "error"));
+        assert!(rep.mediated_tools.iter().any(|t| t == "Bash"));
+        assert!(rep.unmediated_tools.iter().any(|t| t.contains("Grep")));
+    }
+
+    #[test]
+    fn status_lists_mediated_and_unmediated() {
+        let tmp = tempdir().unwrap();
+        let bin = tmp.path().join("lia");
+        fs::write(&bin, b"x").unwrap();
+        let req = InstallRequest {
+            lia_home: tmp.path().join("lia-home"),
+            lia_bin: bin,
+            claude_home: tmp.path().join("claude"),
+            codex_home: tmp.path().join("codex"),
+            gemini_home: tmp.path().join("gemini"),
+            cursor_home: tmp.path().join("cursor"),
+            dry_run: false,
+            apply_live: false,
+            allowed_roots: vec![tmp.path().to_path_buf()],
+            union_roots: false,
+        };
+        install(&req).unwrap();
+        let st = status(&req).unwrap();
+        assert!(!st.mediated_tools.is_empty());
+        assert!(!st.unmediated_tools.is_empty());
+        assert!(st.notes.iter().any(|n| n.contains("mediated tools")));
+    }
+
+    #[test]
+    fn matcher_includes_task_and_agent_for_spawn() {
+        assert!(CLAUDE_PRETOOL_MATCHER.contains("Task"));
+        assert!(CLAUDE_PRETOOL_MATCHER.contains("Agent"));
     }
 }

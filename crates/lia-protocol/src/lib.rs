@@ -112,6 +112,8 @@ pub enum ActionKind {
     AddDependency,
     CompleteTask,
     Network,
+    /// Parent agent spawn (Task / spawn_subagent / Agent). V3 spawn GATE.
+    SpawnAgent,
     Other,
 }
 
