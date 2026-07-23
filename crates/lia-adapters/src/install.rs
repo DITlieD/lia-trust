@@ -612,8 +612,15 @@ exec "{bin}" hook --adapter {adapter} \
 }
 
 pub fn default_gate_config_json(allowed_roots: &[PathBuf], cwd: &Path) -> Value {
+    // Empty roots: prefer $HOME over install-time cwd. Agents (Claude/Grok) routinely
+    // touch paths under the user home outside any single repo; defaulting to cwd alone
+    // caused a flood of SHELL_OUT_OF_SCOPE/FS_OUT_OF_SCOPE false denials after install
+    // from a clone (see lia-grok-tool-block diagnosis 2026-07-24).
     let roots: Vec<String> = if allowed_roots.is_empty() {
-        vec![cwd.display().to_string()]
+        match dirs_home() {
+            Some(home) => vec![home.display().to_string()],
+            None => vec![cwd.display().to_string()],
+        }
     } else {
         allowed_roots
             .iter()
@@ -630,6 +637,28 @@ pub fn default_gate_config_json(allowed_roots: &[PathBuf], cwd: &Path) -> Value 
         "registry": {},
         "env": {},
     })
+}
+
+/// Prefer explicit install roots; otherwise keep a prior config's roots so reinstall
+/// from a single repo does not shrink a broader home-scoped install.
+fn resolve_install_gate_config(
+    allowed_roots: &[PathBuf],
+    cwd: &Path,
+    existing_config: Option<&Value>,
+) -> Value {
+    if !allowed_roots.is_empty() {
+        return default_gate_config_json(allowed_roots, cwd);
+    }
+    if let Some(prev) = existing_config {
+        if let Some(arr) = prev.get("allowed_roots").and_then(|v| v.as_array()) {
+            if !arr.is_empty() {
+                let mut out = default_gate_config_json(&[], cwd);
+                out["allowed_roots"] = prev["allowed_roots"].clone();
+                return out;
+            }
+        }
+    }
+    default_gate_config_json(allowed_roots, cwd)
 }
 
 pub fn default_probe_json(adapter: &str) -> Value {
@@ -760,7 +789,16 @@ pub fn install(req: &InstallRequest) -> Result<InstallReport, InstallError> {
     };
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let config = default_gate_config_json(&req.allowed_roots, &cwd);
+    let existing_config = if paths.config_json.exists() {
+        Some(read_json_or_empty(&paths.config_json)?)
+    } else {
+        None
+    };
+    let config = resolve_install_gate_config(
+        &req.allowed_roots,
+        &cwd,
+        existing_config.as_ref(),
+    );
     let probe = default_probe_json("claude-code");
 
     let claude_existing = read_json_or_empty(&paths.claude_settings)?;
@@ -1340,5 +1378,42 @@ command = "/bin/true"
                 || k.cannot_observe.iter().any(|s| s.contains("CONFINE"))
         );
         assert!(!k.includes.is_empty());
+    }
+
+    #[test]
+    fn empty_allowed_roots_default_to_home_not_cwd() {
+        let cwd = PathBuf::from("/tmp/some-repo-clone");
+        let cfg = default_gate_config_json(&[], &cwd);
+        let roots = cfg["allowed_roots"].as_array().expect("roots array");
+        assert_eq!(roots.len(), 1);
+        if let Some(home) = dirs_home() {
+            assert_eq!(roots[0].as_str().unwrap(), home.to_string_lossy());
+        } else {
+            assert_eq!(roots[0].as_str().unwrap(), cwd.to_string_lossy());
+        }
+    }
+
+    #[test]
+    fn reinstall_without_explicit_roots_preserves_prior_roots() {
+        let home = PathBuf::from("/home/agent");
+        let prior = json!({
+            "allowed_roots": [home.display().to_string()],
+            "cwd": "/tmp/other",
+        });
+        let cfg = resolve_install_gate_config(&[], Path::new("/tmp/repo"), Some(&prior));
+        let roots = cfg["allowed_roots"].as_array().unwrap();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].as_str().unwrap(), home.to_string_lossy());
+    }
+
+    #[test]
+    fn explicit_allowed_roots_override_prior_config() {
+        let prior = json!({ "allowed_roots": ["/home/agent"] });
+        let explicit = vec![PathBuf::from("/tmp/only-this")];
+        let cfg =
+            resolve_install_gate_config(&explicit, Path::new("/tmp/repo"), Some(&prior));
+        let roots = cfg["allowed_roots"].as_array().unwrap();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].as_str().unwrap(), "/tmp/only-this");
     }
 }

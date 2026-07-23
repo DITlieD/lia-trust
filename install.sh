@@ -19,7 +19,7 @@
 #   LIA_NO_APPLY_LIVE=1 wire without --apply-live (refuses real ~/.claude|~/.codex)
 #   LIA_REPO_URL        git clone URL when not already inside the repo
 #   LIA_INSTALL_MODE    auto|prebuilt|source (default: auto)
-#   LIA_RELEASE_TAG     release tag (default: v0.2.1)
+#   LIA_RELEASE_TAG     release tag (default: v0.2.2)
 #   LIA_RELEASE_BASE_URL override release asset base URL (advanced/testing)
 #   LIA_REPO_REF        source fallback ref (default: LIA_RELEASE_TAG)
 #   LIA_SKIP_BUILD=1    use existing release binary only (fail if missing)
@@ -29,7 +29,7 @@
 # Requires: bash + curl + tar + sha256sum (prebuilt); cargo+rustc + git (source fallback).
 set -euo pipefail
 
-VERSION_HINT="0.2.1"
+VERSION_HINT="0.2.2"
 RELEASE_TAG="${LIA_RELEASE_TAG:-v${VERSION_HINT}}"
 INSTALL_MODE="${LIA_INSTALL_MODE:-auto}"
 DEFAULT_REPO_URL="${LIA_REPO_URL:-https://github.com/DITlieD/lia-trust.git}"
